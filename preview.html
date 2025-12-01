@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>大图 A4 分页预览</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    header {
+      padding: 16px 24px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    header span {
+      font-size: 12px;
+      color: #9ca3af;
+    }
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 16px;
+      padding: 16px 20px 20px;
+    }
+    @media (max-width: 960px) {
+      main {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+      }
+    }
+    .panel {
+      background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.05), transparent 60%),
+                  radial-gradient(circle at bottom right, rgba(129, 140, 248, 0.08), transparent 60%),
+                  #020617;
+      border-radius: 18px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      padding: 16px 18px 18px;
+      box-shadow:
+        0 18px 40px rgba(15, 23, 42, 0.8),
+        0 0 0 1px rgba(15, 23, 42, 0.9);
+    }
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 14px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #e5e7eb;
+    }
+    .panel h2 span.dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: radial-gradient(circle at 30% 30%, #22d3ee, #1d4ed8);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+    }
+    .panel p.desc {
+      margin: 0 0 12px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #9ca3af;
+    }
+    .field {
+      margin-bottom: 10px;
+    }
+    .field label {
+      display: block;
+      font-size: 12px;
+      margin-bottom: 4px;
+      color: #e5e7eb;
+    }
+    .field small {
+      display: block;
+      font-size: 11px;
+      color: #9ca3af;
+      margin-top: 2px;
+    }
+    input[type="number"],
+    input[type="text"] {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.6);
+      padding: 6px 9px;
+      background: rgba(15, 23, 42, 0.9);
+      color: #e5e7eb;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+    }
+    input[type="number"]:focus,
+    input[type="text"]:focus {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.5);
+      background: #020617;
+    }
+    input[type="file"] {
+      width: 100%;
+      font-size: 12px;
+      color: #e5e7eb;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+    }
+    .row .field {
+      flex: 1;
+      margin-bottom: 0;
+    }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 6px;
+      font-size: 12px;
+      color: #e5e7eb;
+    }
+    .toggle-row span {
+      font-size: 12px;
+    }
+    .toggle {
+      position: relative;
+      width: 34px;
+      height: 18px;
+    }
+    .toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #111827;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.7);
+      transition: 0.2s;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 12px;
+      width: 12px;
+      left: 2px;
+      bottom: 2px;
+      background: radial-gradient(circle at 30% 30%, #e5e7eb, #9ca3af);
+      border-radius: 50%;
+      transition: 0.2s;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    }
+    .toggle input:checked + .slider {
+      background: radial-gradient(circle at 20% 20%, #22d3ee, #1d4ed8);
+      border-color: transparent;
+    }
+    .toggle input:checked + .slider:before {
+      transform: translateX(14px);
+    }
+    .slider-row {
+      margin-top: 8px;
+    }
+    .slider-row label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      margin-bottom: 2px;
+    }
+    .slider-row input[type="range"] {
+      width: 100%;
+    }
+    .meta {
+      margin-top: 10px;
+      font-size: 11px;
+      color: #9ca3af;
+      line-height: 1.4;
+    }
+    .meta strong {
+      color: #e5e7eb;
+      font-weight: 500;
+    }
+    .preview-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .preview-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: #9ca3af;
+    }
+    .preview-toolbar span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .preview-toolbar span.badge {
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      background: linear-gradient(90deg, rgba(8, 47, 73, 0.7), rgba(15, 23, 42, 0.9));
+      color: #e0f2fe;
+      font-size: 11px;
+    }
+    .preview-container {
+      position: relative;
+      flex: 1;
+      min-height: 260px;
+      background: radial-gradient(circle at top left, rgba(15, 118, 110, 0.24), transparent 55%),
+                  radial-gradient(circle at bottom right, rgba(30, 64, 175, 0.22), transparent 55%),
+                  #020617;
+      border-radius: 18px;
+      border: 1px solid rgba(148, 163, 184, 0.40);
+      overflow: hidden;
+      padding: 10px;
+    }
+    .preview-inner {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: auto;
+    }
+    .canvas-wrapper {
+      position: relative;
+      max-width: 100%;
+      max-height: 100%;
+      outline: 1px solid rgba(148, 163, 184, 0.5);
+      box-shadow:
+        0 18px 40px rgba(15, 23, 42, 0.85),
+        0 0 0 1px rgba(15, 23, 42, 0.9);
+    }
+    #previewImage {
+      display: block;
+      max-width: 100%;
+      height: auto;
+    }
+    .grid-line {
+      position: absolute;
+      pointer-events: none;
+      background-image: linear-gradient(to right, rgba(56, 189, 248, 0.95), rgba(37, 99, 235, 0.9));
+      box-shadow: 0 0 22px rgba(56, 189, 248, 0.85);
+      opacity: 0.9;
+    }
+    .grid-line.horizontal {
+      height: 3px;
+      width: 100%;
+    }
+    .grid-line.vertical {
+      width: 3px;
+      height: 100%;
+    }
+    .grid-line::after {
+      content: "";
+      position: absolute;
+      inset: -4px;
+      border-radius: 999px;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      opacity: 0.4;
+    }
+    .hint {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      text-align: center;
+      font-size: 13px;
+      color: #9ca3af;
+      pointer-events: none;
+      padding: 0 24px;
+    }
+    .hint strong {
+      color: #e5e7eb;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+    .hint span {
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>大图 A4 分页预览</h1>
+      <span>选择图片 + 设定行列数，实时查看分页裁切位置。</span>
+    </div>
+    <span>预览仅用于视觉参考，实际裁切仍由 Python 脚本完成。</span>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2><span class="dot"></span>参数设置</h2>
+      <p class="desc">
+        先选择一张大图，然后设置「横向/纵向页数」和 DPI。右侧会实时叠加网格线，展示切页效果。
+      </p>
+      <div class="field">
+        <label for="imageInput">选择大图（JPG/PNG）：</label>
+        <input type="file" id="imageInput" accept="image/*" />
+        <small>图片只在本地浏览器中读取，不会上传。</small>
+      </div>
+
+      <div class="row" style="margin-top: 8px;">
+        <div class="field">
+          <label for="cols">横向页数（列数）：</label>
+          <input id="cols" type="number" min="1" value="2" />
+        </div>
+        <div class="field">
+          <label for="rows">纵向页数（行数）：</label>
+          <input id="rows" type="number" min="1" value="2" />
+        </div>
+      </div>
+
+      <div class="row" style="margin-top: 8px;">
+        <div class="field">
+          <label for="dpi">DPI（仅用于尺寸参考）：</label>
+          <input id="dpi" type="number" min="72" value="300" />
+          <small>Python 脚本默认也是 300 DPI，可保持一致。</small>
+        </div>
+        <div class="field">
+          <label for="orientation">纸张方向：</label>
+          <input id="orientation" type="text" value="纵向（竖版）" readonly
+                 style="cursor: default; background: rgba(15,23,42,0.9);" />
+          <small>实际裁切使用 A4 竖版，如需横版可以在脚本中互换宽/高。</small>
+        </div>
+      </div>
+
+      <div class="toggle-row">
+        <span>保持原图比例（不强行拉伸）</span>
+        <label class="toggle">
+          <input id="keepAspect" type="checkbox" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="slider-row">
+        <label>
+          <span>预览缩放</span>
+          <span id="zoomLabel">100%</span>
+        </label>
+        <input id="zoom" type="range" min="30" max="160" value="100" />
+      </div>
+
+      <div class="meta" id="metaInfo">
+        <div><strong>原图：</strong><span id="origSize">尚未选择</span></div>
+        <div><strong>目标大图：</strong><span id="targetSize">-</span></div>
+        <div><strong>总页数：</strong><span id="pages">-</span></div>
+        <div><strong>方向：</strong><span id="orientInfo">A4 竖版</span></div>
+      </div>
+    </section>
+
+    <section class="preview-panel">
+      <div class="preview-toolbar">
+        <span class="badge">实时裁切预览</span>
+        <span>虚线仅表示预计的 A4 分页位置，并不是真实打印边距。</span>
+      </div>
+      <div class="preview-container">
+        <div class="preview-inner" id="previewInner">
+          <div class="hint" id="hint">
+            <strong>尚未选择图片</strong>
+            <span>请先在左侧选择一张大图，随后会显示分页裁切网格。</span>
+          </div>
+          <div class="canvas-wrapper" id="canvasWrapper" style="display: none;">
+            <img id="previewImage" alt="预览图片" />
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const A4_WIDTH_INCH = 8.27;
+    const A4_HEIGHT_INCH = 11.69;
+
+    const imageInput = document.getElementById("imageInput");
+    const colsInput = document.getElementById("cols");
+    const rowsInput = document.getElementById("rows");
+    const dpiInput = document.getElementById("dpi");
+    const keepAspectInput = document.getElementById("keepAspect");
+    const zoomInput = document.getElementById("zoom");
+    const zoomLabel = document.getElementById("zoomLabel");
+
+    const previewImage = document.getElementById("previewImage");
+    const canvasWrapper = document.getElementById("canvasWrapper");
+    const previewInner = document.getElementById("previewInner");
+    const hint = document.getElementById("hint");
+
+    const origSizeSpan = document.getElementById("origSize");
+    const targetSizeSpan = document.getElementById("targetSize");
+    const pagesSpan = document.getElementById("pages");
+    const orientInfoSpan = document.getElementById("orientInfo");
+
+    let origWidth = 0;
+    let origHeight = 0;
+
+    function updateMeta() {
+      const cols = Math.max(1, parseInt(colsInput.value || "1", 10));
+      const rows = Math.max(1, parseInt(rowsInput.value || "1", 10));
+      const dpi = Math.max(1, parseInt(dpiInput.value || "300", 10));
+
+      if (origWidth && origHeight) {
+        origSizeSpan.textContent = `${origWidth} × ${origHeight} px`;
+      } else {
+        origSizeSpan.textContent = "尚未选择";
+      }
+
+      const a4w = Math.round(A4_WIDTH_INCH * dpi);
+      const a4h = Math.round(A4_HEIGHT_INCH * dpi);
+      const totalW = cols * a4w;
+      const totalH = rows * a4h;
+
+      targetSizeSpan.textContent = `${totalW} × ${totalH} px（A4≈${a4w}×${a4h}）`;
+      pagesSpan.textContent = `${cols * rows} 页（${cols} × ${rows}）`;
+      orientInfoSpan.textContent = "A4 竖版";
+    }
+
+    function clearGrid() {
+      const existing = canvasWrapper.querySelectorAll(".grid-line");
+      existing.forEach(el => el.remove());
+    }
+
+    function drawGrid() {
+      clearGrid();
+      if (!origWidth || !origHeight) return;
+
+      const cols = Math.max(1, parseInt(colsInput.value || "1", 10));
+      const rows = Math.max(1, parseInt(rowsInput.value || "1", 10));
+
+      const imgRect = previewImage.getBoundingClientRect();
+      const containerRect = canvasWrapper.getBoundingClientRect();
+
+      const scaleX = imgRect.width / origWidth;
+      const scaleY = imgRect.height / origHeight;
+
+      for (let i = 1; i < cols; i++) {
+        const x = (origWidth / cols) * i * scaleX;
+        const line = document.createElement("div");
+        line.className = "grid-line vertical";
+        line.style.left = `${x}px`;
+        line.style.top = "0";
+        line.style.height = `${imgRect.height}px`;
+        canvasWrapper.appendChild(line);
+      }
+
+      for (let j = 1; j < rows; j++) {
+        const y = (origHeight / rows) * j * scaleY;
+        const line = document.createElement("div");
+        line.className = "grid-line horizontal";
+        line.style.top = `${y}px`;
+        line.style.left = "0";
+        line.style.width = `${imgRect.width}px`;
+        canvasWrapper.appendChild(line);
+      }
+    }
+
+    function applyZoom() {
+      const zoom = parseInt(zoomInput.value, 10) || 100;
+      zoomLabel.textContent = zoom + "%";
+      const scale = zoom / 100;
+      canvasWrapper.style.transformOrigin = "top left";
+      canvasWrapper.style.transform = `scale(${scale})`;
+    }
+
+    imageInput.addEventListener("change", (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(ev) {
+        previewImage.onload = function() {
+          origWidth = previewImage.naturalWidth;
+          origHeight = previewImage.naturalHeight;
+          hint.style.display = "none";
+          canvasWrapper.style.display = "block";
+          updateMeta();
+          applyZoom();
+          setTimeout(drawGrid, 50);
+        };
+        previewImage.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    [colsInput, rowsInput, dpiInput].forEach(input => {
+      input.addEventListener("input", () => {
+        updateMeta();
+        setTimeout(drawGrid, 10);
+      });
+    });
+
+    zoomInput.addEventListener("input", () => {
+      applyZoom();
+      setTimeout(drawGrid, 10);
+    });
+
+    window.addEventListener("resize", () => {
+      setTimeout(drawGrid, 100);
+    });
+
+    updateMeta();
+    applyZoom();
+  </script>
+</body>
+</html>
+
+
