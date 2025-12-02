@@ -3,260 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <title>大图 A4 取景裁切导出 PDF</title>
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
-      background: #020617;
-      color: #e5e7eb;
-      display: flex;
-      flex-direction: column;
-      min-height: 100vh;
-    }
-    header {
-      padding: 14px 22px;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.4);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    header h1 {
-      margin: 0;
-      font-size: 18px;
-      font-weight: 600;
-    }
-    header span {
-      font-size: 12px;
-      color: #9ca3af;
-    }
-    main {
-      flex: 1;
-      display: grid;
-      grid-template-columns: 320px 1fr;
-      gap: 16px;
-      padding: 14px 18px 18px;
-    }
-    @media (max-width: 960px) {
-      main {
-        grid-template-columns: 1fr;
-        grid-template-rows: auto 1fr;
-      }
-    }
-    .panel {
-      background: radial-gradient(circle at top left, rgba(56,189,248,0.06), transparent 60%),
-                  radial-gradient(circle at bottom right, rgba(129,140,248,0.1), transparent 60%),
-                  #020617;
-      border-radius: 18px;
-      border: 1px solid rgba(148,163,184,0.35);
-      padding: 14px 16px 16px;
-      box-shadow:
-        0 18px 40px rgba(15,23,42,0.9),
-        0 0 0 1px rgba(15,23,42,0.9);
-    }
-    .panel h2 {
-      margin: 0 0 10px;
-      font-size: 14px;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .panel h2 span.dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 999px;
-      background: radial-gradient(circle at 30% 30%, #22d3ee, #1d4ed8);
-      box-shadow: 0 0 0 3px rgba(56,189,248,0.25);
-    }
-    .panel p.desc {
-      margin: 0 0 10px;
-      font-size: 12px;
-      color: #9ca3af;
-      line-height: 1.4;
-    }
-    .field { margin-bottom: 8px; }
-    .field label {
-      display: block;
-      font-size: 12px;
-      margin-bottom: 3px;
-    }
-    .field small {
-      display: block;
-      font-size: 11px;
-      color: #9ca3af;
-      margin-top: 2px;
-    }
-    input[type="file"] {
-      width: 100%;
-      font-size: 12px;
-      color: #e5e7eb;
-    }
-    input[type="number"],
-    select {
-      width: 100%;
-      border-radius: 10px;
-      border: 1px solid rgba(148,163,184,0.6);
-      padding: 5px 8px;
-      background: rgba(15,23,42,0.95);
-      color: #e5e7eb;
-      font-size: 13px;
-      outline: none;
-    }
-    input[type="number"]:focus,
-    select:focus {
-      border-color: #38bdf8;
-      box-shadow: 0 0 0 1px rgba(56,189,248,0.5);
-      background: #020617;
-    }
-    .slider-row {
-      margin-top: 6px;
-    }
-    .slider-row label {
-      display: flex;
-      justify-content: space-between;
-      font-size: 12px;
-      margin-bottom: 2px;
-    }
-    .slider-row input[type="range"] {
-      width: 100%;
-    }
-    button {
-      border-radius: 999px;
-      border: none;
-      padding: 7px 14px;
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      background: linear-gradient(90deg, #22c55e, #16a34a);
-      color: #ecfdf5;
-      box-shadow: 0 10px 25px rgba(22,163,74,0.55);
-      margin-top: 8px;
-    }
-    button:disabled {
-      opacity: 0.45;
-      cursor: default;
-      box-shadow: none;
-    }
-    .meta {
-      margin-top: 8px;
-      font-size: 11px;
-      color: #9ca3af;
-    }
-    .meta strong {
-      color: #e5e7eb;
-      font-weight: 500;
-    }
-    .preview-panel {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .preview-toolbar {
-      display: flex;
-      justify-content: space-between;
-      font-size: 12px;
-      color: #9ca3af;
-      align-items: center;
-    }
-    .badge {
-      padding: 2px 8px;
-      border-radius: 999px;
-      border: 1px solid rgba(56,189,248,0.4);
-      background: linear-gradient(90deg, rgba(8,47,73,0.85), rgba(15,23,42,0.95));
-      color: #e0f2fe;
-      font-size: 11px;
-    }
-    .preview-container {
-      flex: 1;
-      border-radius: 18px;
-      border: 1px solid rgba(148,163,184,0.4);
-      background: radial-gradient(circle at top left, rgba(30,64,175,0.25), transparent 55%),
-                  radial-gradient(circle at bottom right, rgba(8,47,73,0.35), transparent 55%),
-                  #020617;
-      padding: 10px;
-      display: flex;
-      align-items: stretch;
-      justify-content: center;
-    }
-    .image-stage {
-      position: relative;
-      flex: 1;
-      max-width: 100%;
-      border-radius: 14px;
-      overflow: hidden;
-      background: #020617;
-      box-shadow:
-        0 18px 40px rgba(15,23,42,0.9),
-        0 0 0 1px rgba(15,23,42,0.9);
-      cursor: grab;
-    }
-    .image-stage.dragging {
-      cursor: grabbing;
-    }
-    #image {
-      position: absolute;
-      top: 0;
-      left: 0;
-      transform-origin: top left;
-      will-change: transform;
-      user-select: none;
-      -webkit-user-drag: none;
-    }
-    #cropBox {
-      position: absolute;
-      border: 3px solid rgba(248,250,252,0.95);
-      box-shadow:
-        0 0 0 1px rgba(15,23,42,0.85),
-        0 0 25px rgba(15,23,42,0.95);
-      pointer-events: auto;
-      box-sizing: border-box;
-      background: rgba(15,23,42,0.1);
-      backdrop-filter: blur(1px);
-      -webkit-backdrop-filter: blur(1px);
-      cursor: move;
-    }
-    #cropBox::before {
-      content: "";
-      position: absolute;
-      inset: 4px;
-      border-radius: 4px;
-      border: 1px dashed rgba(148,163,184,0.9);
-    }
-    #cropBox .handle {
-      position: absolute;
-      width: 9px;
-      height: 9px;
-      border-radius: 999px;
-      background: #e5e7eb;
-      border: 1px solid #020617;
-    }
-    #cropBox .handle.br {
-      right: -6px;
-      bottom: -6px;
-      cursor: nwse-resize;
-    }
-    .hint {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-direction: column;
-      text-align: center;
-      font-size: 13px;
-      color: #9ca3af;
-      pointer-events: none;
-      padding: 0 24px;
-    }
-    .hint strong {
-      color: #e5e7eb;
-      margin-bottom: 6px;
-    }
-    .hint span {
-      font-size: 12px;
-    }
-  </style>
+  <link rel="stylesheet" href="crop.css" />
 </head>
 <body>
   <header>
@@ -271,7 +18,7 @@
     <section class="panel">
       <h2><span class="dot"></span>参数与导出</h2>
       <p class="desc">
-        1. 选择图片 → 2. 鼠标拖动取景框（或右下角缩放，保持 A4 比例） → 3. 点“导出当前视野为 PDF”。
+        1. 选择图片 → 2. 鼠标拖动取景框（或右下角缩放，保持 A4 比例） → 3. 点"导出当前视野为 PDF"。
       </p>
 
       <div class="field">
@@ -286,6 +33,7 @@
           <option value="portrait" selected>A4 竖版（8.27 × 11.69 in）</option>
           <option value="landscape">A4 横版（11.69 × 8.27 in）</option>
         </select>
+        <small id="orientationHint">单页/分页模式均适用</small>
       </div>
 
       <div class="field">
@@ -294,9 +42,20 @@
         <small>一般 300 已够清晰，数值越大 PDF 也会越大。</small>
       </div>
 
-      <div class="field">
+      <div class="mode-toggle-row" id="modeToggleRow">
+        <label>
+          <span class="mode-label-left">单页取景</span>
+          <label class="mode-toggle">
+            <input type="checkbox" id="modeToggle" checked />
+            <span class="mode-slider"></span>
+          </label>
+          <span class="mode-label-right">分页模式</span>
+        </label>
+      </div>
+
+      <div class="field" id="tileSettings" style="display:none;">
         <label>分页裁剪（按多页 A4 导出）：</label>
-        <div style="display:flex; gap:6px;">
+        <div style="display:flex; gap:6px; margin-bottom:8px;">
           <div style="flex:1;">
             <input id="cols" type="number" min="1" value="2" />
             <small>横向页数</small>
@@ -306,6 +65,7 @@
             <small>纵向页数</small>
           </div>
         </div>
+        <small style="display:block;margin-top:4px;color:#9ca3af;">拖动调整截取框，网格线实时显示分页位置</small>
       </div>
 
       <div class="slider-row">
@@ -313,11 +73,14 @@
           <span>预览缩放（大图）</span>
           <span id="zoomLabel">100%</span>
         </label>
-        <input id="zoom" type="range" min="10" max="100" value="100" />
+        <input id="zoom" type="range" min="1" max="100" value="100" />
+        <button id="fitWindowBtn" style="width:100%;margin-top:6px;background:linear-gradient(90deg,#6366f1,#4f46e5);box-shadow:0 8px 20px rgba(79,70,229,0.5);font-size:12px;padding:6px 12px;">
+          适应窗口大小
+        </button>
       </div>
 
-      <button id="exportBtn" disabled>导出当前视野为 PDF</button>
-      <button id="exportTilesBtn" disabled style="margin-left:6px;background:linear-gradient(90deg,#3b82f6,#2563eb);box-shadow:0 10px 25px rgba(37,99,235,0.55);">
+      <button id="exportBtn" disabled style="width:100%;">导出当前视野为 PDF</button>
+      <button id="exportTilesBtn" disabled style="display:none;width:100%;margin-top:8px;background:linear-gradient(90deg,#3b82f6,#2563eb);box-shadow:0 10px 25px rgba(37,99,235,0.55);">
         按分页导出多页 PDF
       </button>
 
@@ -334,11 +97,22 @@
         <span>拖动大图或取景框调整位置，右下角小圆点可拉伸取景框（始终保持 A4 比例）。</span>
       </div>
       <div class="preview-container">
-        <div class="image-stage" id="stage">
+        <div class="image-stage mode-crop" id="stage">
           <img id="image" alt="预览图片" style="display:none;" />
+          <div id="blurOverlayTop" class="blur-overlay blur-overlay-top" style="display:none;"></div>
+          <div id="blurOverlayBottom" class="blur-overlay blur-overlay-bottom" style="display:none;"></div>
+          <div id="blurOverlayLeft" class="blur-overlay blur-overlay-left" style="display:none;"></div>
+          <div id="blurOverlayRight" class="blur-overlay blur-overlay-right" style="display:none;"></div>
           <div id="cropBox" style="display:none;">
             <div class="handle br"></div>
           </div>
+          <div id="tileCropBox" style="display:none;">
+            <div class="handle tl"></div>
+            <div class="handle tr"></div>
+            <div class="handle bl"></div>
+            <div class="handle br"></div>
+          </div>
+          <div class="tile-grid" id="tileGrid"></div>
           <div class="hint" id="hint">
             <strong>尚未加载图片</strong>
             <span>请先在左侧选择一张大图，然后拖动 A4 取景框到你想打印的区域。</span>
@@ -348,416 +122,7 @@
     </section>
   </main>
 
-  <script>
-    const A4_RATIO_PORTRAIT = 11.69 / 8.27;  // 高 / 宽
-    const A4_RATIO_LANDSCAPE = 8.27 / 11.69;
-
-    const imageInput = document.getElementById("imageInput");
-    const imageEl = document.getElementById("image");
-    const stage = document.getElementById("stage");
-    const cropBox = document.getElementById("cropBox");
-    const hint = document.getElementById("hint");
-    const zoomSlider = document.getElementById("zoom");
-    const zoomLabel = document.getElementById("zoomLabel");
-    const dpiInput = document.getElementById("dpi");
-    const orientationSelect = document.getElementById("orientation");
-    const exportBtn = document.getElementById("exportBtn");
-    const exportTilesBtn = document.getElementById("exportTilesBtn");
-    const origSizeSpan = document.getElementById("origSize");
-    const boxRatioSpan = document.getElementById("boxRatio");
-    const colsInput = document.getElementById("cols");
-    const rowsInput = document.getElementById("rows");
-
-    let origWidth = 0;
-    let origHeight = 0;
-    let currentFile = null;
-
-    let imgScale = 1.0;
-    let imgOffsetX = 0;
-    let imgOffsetY = 0;
-
-    let boxX = 0;
-    let boxY = 0;
-    let boxW = 0;
-    let boxH = 0;
-
-    let draggingStage = false;
-    let dragStartX = 0;
-    let dragStartY = 0;
-    let dragOrigOffsetX = 0;
-    let dragOrigOffsetY = 0;
-
-    let draggingBox = false;
-    let dragBoxStartX = 0;
-    let dragBoxStartY = 0;
-    let dragBoxOrigX = 0;
-    let dragBoxOrigY = 0;
-
-    let resizingBox = false;
-    let resizeStartX = 0;
-    let resizeStartY = 0;
-    let resizeOrigW = 0;
-    let resizeOrigH = 0;
-
-    function getA4Ratio() {
-      return orientationSelect.value === "portrait"
-        ? A4_RATIO_PORTRAIT
-        : A4_RATIO_LANDSCAPE;
-    }
-
-    function updateImageTransform() {
-      imageEl.style.transform = `translate(${imgOffsetX}px, ${imgOffsetY}px) scale(${imgScale})`;
-    }
-
-    function layoutInitial() {
-      const stageRect = stage.getBoundingClientRect();
-      const stageW = stageRect.width;
-      const stageH = stageRect.height;
-
-      const scaleX = stageW / origWidth;
-      const scaleY = stageH / origHeight;
-      imgScale = Math.min(scaleX, scaleY) * 0.9;
-
-      // 将初始缩放限制在 10% - 100% 之间
-      const initialZoom = Math.min(100, Math.max(10, Math.round(imgScale * 100)));
-      imgScale = initialZoom / 100;
-      zoomSlider.value = initialZoom;
-      zoomLabel.textContent = `${zoomSlider.value}%`;
-
-      const displayW = origWidth * imgScale;
-      const displayH = origHeight * imgScale;
-      imgOffsetX = (stageW - displayW) / 2;
-      imgOffsetY = (stageH - displayH) / 2;
-      updateImageTransform();
-
-      const ratio = getA4Ratio();
-      boxW = displayW * 0.5;
-      boxH = boxW * ratio;
-      if (boxH > displayH * 0.8) {
-        boxH = displayH * 0.8;
-        boxW = boxH / ratio;
-      }
-      boxX = imgOffsetX + (displayW - boxW) / 2;
-      boxY = imgOffsetY + (displayH - boxH) / 2;
-      applyBoxStyle();
-    }
-
-    function applyBoxStyle() {
-      cropBox.style.left = boxX + "px";
-      cropBox.style.top = boxY + "px";
-      cropBox.style.width = boxW + "px";
-      cropBox.style.height = boxH + "px";
-    }
-
-    function applyZoomFromSlider() {
-      if (!origWidth || !origHeight) return;
-      const stageRect = stage.getBoundingClientRect();
-      const stageW = stageRect.width;
-      const stageH = stageRect.height;
-
-      const oldScale = imgScale;
-      const newScale = parseInt(zoomSlider.value, 10) / 100;
-      imgScale = newScale;
-      zoomLabel.textContent = `${zoomSlider.value}%`;
-
-      const stageCenterX = stageW / 2;
-      const stageCenterY = stageH / 2;
-
-      const imgCenterX = imgOffsetX + origWidth * oldScale / 2;
-      const imgCenterY = imgOffsetY + origHeight * oldScale / 2;
-      const dx = imgCenterX - stageCenterX;
-      const dy = imgCenterY - stageCenterY;
-
-      const newImgCenterX = stageCenterX + dx * (newScale / oldScale);
-      const newImgCenterY = stageCenterY + dy * (newScale / oldScale);
-      imgOffsetX += (imgCenterX - newImgCenterX);
-      imgOffsetY += (imgCenterY - newImgCenterY);
-      updateImageTransform();
-    }
-
-    function clampBoxInsideImage() {
-      const imgRect = imageEl.getBoundingClientRect();
-      const stageRect = stage.getBoundingClientRect();
-
-      const minX = Math.max(stageRect.left, imgRect.left);
-      const minY = Math.max(stageRect.top, imgRect.top);
-      const maxX = Math.min(stageRect.right, imgRect.right);
-      const maxY = Math.min(stageRect.bottom, imgRect.bottom);
-
-      const boxRect = cropBox.getBoundingClientRect();
-      let newLeft = boxRect.left;
-      let newTop = boxRect.top;
-      let newRight = boxRect.right;
-      let newBottom = boxRect.bottom;
-
-      const width = boxRect.width;
-      const height = boxRect.height;
-
-      if (width > maxX - minX) {
-        newLeft = minX;
-        newRight = maxX;
-      } else {
-        if (boxRect.left < minX) {
-          newLeft = minX;
-          newRight = minX + width;
-        }
-        if (boxRect.right > maxX) {
-          newRight = maxX;
-          newLeft = maxX - width;
-        }
-      }
-
-      if (height > maxY - minY) {
-        newTop = minY;
-        newBottom = maxY;
-      } else {
-        if (boxRect.top < minY) {
-          newTop = minY;
-          newBottom = minY + height;
-        }
-        if (boxRect.bottom > maxY) {
-          newBottom = maxY;
-          newTop = maxY - height;
-        }
-      }
-
-      const dx = newLeft - boxRect.left;
-      const dy = newTop - boxRect.top;
-      boxX += dx;
-      boxY += dy;
-      applyBoxStyle();
-    }
-
-    imageInput.addEventListener("change", e => {
-      const file = e.target.files && e.target.files[0];
-      if (!file) return;
-      currentFile = file;
-
-      const reader = new FileReader();
-      reader.onload = ev => {
-        imageEl.onload = () => {
-          origWidth = imageEl.naturalWidth;
-          origHeight = imageEl.naturalHeight;
-          origSizeSpan.textContent = `${origWidth} × ${origHeight} px`;
-          hint.style.display = "none";
-          imageEl.style.display = "block";
-          cropBox.style.display = "block";
-          layoutInitial();
-          exportBtn.disabled = false;
-          exportTilesBtn.disabled = false;
-        };
-        imageEl.src = ev.target.result;
-      };
-      reader.readAsDataURL(file);
-    });
-
-    zoomSlider.addEventListener("input", () => {
-      applyZoomFromSlider();
-      clampBoxInsideImage();
-    });
-
-    orientationSelect.addEventListener("change", () => {
-      const r = getA4Ratio();
-      boxRatioSpan.textContent = orientationSelect.value === "portrait"
-        ? "A4 竖版"
-        : "A4 横版";
-      const stageRect = stage.getBoundingClientRect();
-      const displayH = origHeight * imgScale;
-      const displayW = origWidth * imgScale;
-      boxW = displayW * 0.5;
-      boxH = boxW * r;
-      if (boxH > displayH * 0.8) {
-        boxH = displayH * 0.8;
-        boxW = boxH / r;
-      }
-      boxX = imgOffsetX + (displayW - boxW) / 2;
-      boxY = imgOffsetY + (displayH - boxH) / 2;
-      applyBoxStyle();
-      clampBoxInsideImage();
-    });
-
-    stage.addEventListener("mousedown", e => {
-      if (e.target === cropBox || e.target.closest("#cropBox")) return;
-      if (!origWidth || !origHeight) return;
-      draggingStage = true;
-      stage.classList.add("dragging");
-      dragStartX = e.clientX;
-      dragStartY = e.clientY;
-      dragOrigOffsetX = imgOffsetX;
-      dragOrigOffsetY = imgOffsetY;
-    });
-
-    cropBox.addEventListener("mousedown", e => {
-      if (e.target.classList.contains("handle")) return;
-      draggingBox = true;
-      dragBoxStartX = e.clientX;
-      dragBoxStartY = e.clientY;
-      const rect = cropBox.getBoundingClientRect();
-      dragBoxOrigX = rect.left;
-      dragBoxOrigY = rect.top;
-      e.stopPropagation();
-    });
-
-    const handleBr = cropBox.querySelector(".handle.br");
-    handleBr.addEventListener("mousedown", e => {
-      resizingBox = true;
-      resizeStartX = e.clientX;
-      resizeStartY = e.clientY;
-      const rect = cropBox.getBoundingClientRect();
-      resizeOrigW = rect.width;
-      resizeOrigH = rect.height;
-      e.stopPropagation();
-    });
-
-    window.addEventListener("mousemove", e => {
-      if (draggingStage) {
-        const dx = e.clientX - dragStartX;
-        const dy = e.clientY - dragStartY;
-        imgOffsetX = dragOrigOffsetX + dx;
-        imgOffsetY = dragOrigOffsetY + dy;
-        updateImageTransform();
-      } else if (draggingBox) {
-        const dx = e.clientX - dragBoxStartX;
-        const dy = e.clientY - dragBoxStartY;
-        const newLeft = dragBoxOrigX + dx;
-        const newTop = dragBoxOrigY + dy;
-        const stageRect = stage.getBoundingClientRect();
-        boxX = newLeft - stageRect.left;
-        boxY = newTop - stageRect.top;
-        applyBoxStyle();
-        clampBoxInsideImage();
-      } else if (resizingBox) {
-        const dx = e.clientX - resizeStartX;
-        const ratio = getA4Ratio();
-        let newW = resizeOrigW + dx;
-        newW = Math.max(40, newW);
-        let newH = newW * ratio;
-        boxW = newW;
-        boxH = newH;
-        applyBoxStyle();
-        clampBoxInsideImage();
-      }
-    });
-
-    window.addEventListener("mouseup", () => {
-      draggingStage = false;
-      draggingBox = false;
-      resizingBox = false;
-      stage.classList.remove("dragging");
-    });
-
-    function computeCropOnOriginal() {
-      const imgRect = imageEl.getBoundingClientRect();
-      const boxRect = cropBox.getBoundingClientRect();
-      const intersectLeft = Math.max(boxRect.left, imgRect.left);
-      const intersectTop = Math.max(boxRect.top, imgRect.top);
-      const intersectRight = Math.min(boxRect.right, imgRect.right);
-      const intersectBottom = Math.min(boxRect.bottom, imgRect.bottom);
-      if (intersectRight <= intersectLeft || intersectBottom <= intersectTop) {
-        return null;
-      }
-      const cropScreenW = intersectRight - intersectLeft;
-      const cropScreenH = intersectBottom - intersectTop;
-      const offsetXOnImg = intersectLeft - imgRect.left;
-      const offsetYOnImg = intersectTop - imgRect.top;
-      const scaleX = origWidth / imgRect.width;
-      const scaleY = origHeight / imgRect.height;
-      const cropX = offsetXOnImg * scaleX;
-      const cropY = offsetYOnImg * scaleY;
-      const cropW = cropScreenW * scaleX;
-      const cropH = cropScreenH * scaleY;
-      return { cropX, cropY, cropW, cropH };
-    }
-
-    exportBtn.addEventListener("click", async () => {
-      if (!currentFile) return;
-      const rect = computeCropOnOriginal();
-      if (!rect) {
-        alert("当前取景框不在图片区域内，请稍微移动后重试。");
-        return;
-      }
-      const dpi = parseInt(dpiInput.value || "300", 10) || 300;
-      const form = new FormData();
-      form.append("image", currentFile);
-      form.append("crop_x", rect.cropX);
-      form.append("crop_y", rect.cropY);
-      form.append("crop_w", rect.cropW);
-      form.append("crop_h", rect.cropH);
-      form.append("dpi", dpi);
-
-      exportBtn.disabled = true;
-      exportBtn.textContent = "正在导出 PDF…";
-      try {
-        const resp = await fetch("/export", {
-          method: "POST",
-          body: form
-        });
-        if (!resp.ok) {
-          const data = await resp.json().catch(() => ({}));
-          alert("导出失败：" + (data.error || resp.statusText));
-        } else {
-          const blob = await resp.blob();
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = "view.pdf";
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        }
-      } catch (err) {
-        alert("导出出错：" + err);
-      } finally {
-        exportBtn.disabled = false;
-        exportBtn.textContent = "导出当前视野为 PDF";
-      }
-    });
-
-    exportTilesBtn.addEventListener("click", async () => {
-      if (!currentFile) return;
-      const cols = Math.max(1, parseInt(colsInput.value || "2", 10));
-      const rows = Math.max(1, parseInt(rowsInput.value || "2", 10));
-      const dpi = parseInt(dpiInput.value || "300", 10) || 300;
-      const orientation = orientationSelect.value || "portrait";
-
-      const form = new FormData();
-      form.append("image", currentFile);
-      form.append("cols", cols);
-      form.append("rows", rows);
-      form.append("dpi", dpi);
-      form.append("orientation", orientation);
-
-      exportTilesBtn.disabled = true;
-      exportTilesBtn.textContent = "正在生成多页 PDF…";
-      try {
-        const resp = await fetch("/tile_export", {
-          method: "POST",
-          body: form
-        });
-        if (!resp.ok) {
-          const data = await resp.json().catch(() => ({}));
-          alert("分页导出失败：" + (data.error || resp.statusText));
-        } else {
-          const blob = await resp.blob();
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `poster_${cols}x${rows}.pdf`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        }
-      } catch (err) {
-        alert("分页导出出错：" + err);
-      } finally {
-        exportTilesBtn.disabled = false;
-        exportTilesBtn.textContent = "按分页导出多页 PDF";
-      }
-    });
-  </script>
+  <script src="crop.js"></script>
 </body>
 </html>
-
 

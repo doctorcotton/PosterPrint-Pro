@@ -19,6 +19,13 @@ def index():
     return send_from_directory(base_dir, "crop.html")
 
 
+@app.route("/<path:filename>")
+def static_files(filename):
+    # 提供静态文件（CSS、JS等）
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    return send_from_directory(base_dir, filename)
+
+
 @app.route("/export", methods=["POST"])
 def export_pdf():
     """
@@ -86,6 +93,17 @@ def tile_export():
         cols = int(float(request.form.get("cols", "2")))
         rows = int(float(request.form.get("rows", "2")))
         dpi = int(float(request.form.get("dpi", "300")))
+        # 整体截取区域（可选）
+        crop_x = request.form.get("crop_x")
+        crop_y = request.form.get("crop_y")
+        crop_w = request.form.get("crop_w")
+        crop_h = request.form.get("crop_h")
+        has_crop = crop_x is not None and crop_y is not None and crop_w is not None and crop_h is not None
+        if has_crop:
+            crop_x = int(float(crop_x))
+            crop_y = int(float(crop_y))
+            crop_w = int(float(crop_w))
+            crop_h = int(float(crop_h))
     except ValueError:
         return jsonify({"error": "分页参数不合法"}), 400
 
@@ -111,6 +129,17 @@ def tile_export():
     with Image.open(img_path) as im:
         im = im.convert("RGB")
         src_w, src_h = im.size
+        
+        # 如果指定了整体截取区域，先裁剪
+        if has_crop:
+            x1 = max(0, min(crop_x, src_w))
+            y1 = max(0, min(crop_y, src_h))
+            x2 = max(0, min(crop_x + crop_w, src_w))
+            y2 = max(0, min(crop_y + crop_h, src_h))
+            if x2 > x1 and y2 > y1:
+                im = im.crop((x1, y1, x2, y2))
+                src_w, src_h = im.size
+        
         # 为了尽量铺满整个 N×M A4 区域，使用类似 CSS cover 的策略：按较大比例缩放并居中裁切
         scale = max(total_w / src_w, total_h / src_h)
         scaled_w = int(round(src_w * scale))
