@@ -1,0 +1,34 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+.venv
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Windows batch files (not needed in Docker)
+*.bat
+
+# macOS
+.DS_Store
+
+# Local runner (not needed in Docker)
+run_crop_app.py
+
+# Other
+*.md
+poster_tiler.py
+preview.html
+

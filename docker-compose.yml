@@ -1,0 +1,23 @@
+name: poster-crop-tool
+
+services:
+  poster-crop:
+    build: .
+    container_name: poster-crop-tool
+    ports:
+      # 映射到主机的 15234 端口，局域网内其他用户可通过 http://你的IP:15234 访问
+      - "15234:5000"
+    restart: unless-stopped
+    # 可选：挂载临时目录用于存储生成的文件
+    volumes:
+      - poster_temp:/tmp
+    environment:
+      - TZ=Asia/Shanghai
+      # 设置宿主机 IP，用于发送飞书通知
+      # 可以手动指定，或者使用下面的命令自动获取：
+      # export HOST_IP=$(ipconfig getifaddr en0) && docker-compose up -d
+      - HOST_IP=${HOST_IP:-请设置HOST_IP}
+
+volumes:
+  poster_temp:
+

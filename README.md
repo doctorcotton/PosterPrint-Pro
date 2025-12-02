@@ -130,7 +130,65 @@ python3 crop_server.py
 ├── crop.css           # 样式文件
 ├── crop.js            # 前端逻辑
 ├── poster_tiler.py    # 命令行版本（可选）
+├── Dockerfile         # Docker 镜像构建文件
+├── docker-compose.yml # Docker Compose 编排文件
+├── start-docker.sh    # Docker 一键启动脚本
+├── entrypoint.py      # 容器启动脚本（含飞书通知）
 └── README.md          # 本文档
+```
+
+---
+
+## 🐳 Docker 部署（局域网共享）
+
+如果你想让局域网内的其他用户也能访问使用，可以通过 Docker 部署。
+
+### 前置要求
+
+安装 [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+
+### 启动服务（推荐）
+
+使用一键启动脚本，会自动获取本机 IP 并发送通知到飞书：
+
+```bash
+./start-docker.sh
+```
+
+### 手动启动
+
+```bash
+# 先获取本机 IP
+export HOST_IP=$(ipconfig getifaddr en0)
+
+# 启动服务
+docker-compose up -d --build
+```
+
+### 访问地址
+
+- 本机访问：`http://localhost:15234`
+- 局域网其他电脑访问：`http://你的电脑IP:15234`
+
+### 🔔 飞书通知
+
+服务启动时会自动发送通知到飞书，包含：
+- 服务名称
+- 访问地址（含当前 IP）
+- 启动时间
+
+这样其他用户就能从飞书获取最新的访问地址了！
+
+### 停止服务
+
+```bash
+docker-compose down
+```
+
+### 查看日志
+
+```bash
+docker-compose logs -f
 ```
 
 ---
