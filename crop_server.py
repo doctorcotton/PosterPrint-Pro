@@ -8,8 +8,31 @@ from PIL import Image
 
 app = Flask(__name__)
 
+# ISO 216，单位：英寸（竖版：宽 × 高）
 A4_WIDTH_INCH = 8.27
 A4_HEIGHT_INCH = 11.69
+A3_WIDTH_INCH = 11.69
+A3_HEIGHT_INCH = 16.54
+
+
+def page_size_inch(paper: str, orientation: str) -> tuple[float, float]:
+    """
+    返回单页 PDF 的页面尺寸 (宽英寸, 高英寸)。
+    paper: a4 | a3；orientation: portrait | landscape
+    """
+    paper_n = (paper or "a4").lower().strip()
+    orient_n = (orientation or "portrait").lower().strip()
+    if paper_n == "a3":
+        w0, h0 = A3_WIDTH_INCH, A3_HEIGHT_INCH
+    elif paper_n == "a4":
+        w0, h0 = A4_WIDTH_INCH, A4_HEIGHT_INCH
+    else:
+        raise ValueError(f"不支持的纸张规格: {paper!r}，仅支持 a4、a3")
+    if orient_n == "landscape":
+        return h0, w0
+    if orient_n == "portrait":
+        return w0, h0
+    raise ValueError(f"不支持的纸张方向: {orientation!r}，仅支持 portrait、landscape")
 
 
 @app.route("/")
@@ -46,7 +69,13 @@ def export_pdf():
         crop_h = int(float(request.form.get("crop_h", "0")))
         dpi = int(float(request.form.get("dpi", "300")))
     except ValueError:
-        return jsonify({"error": "裁剪参数不合法"}), 400
+        return jsonify({"error": "裁剪参数或 DPI 不合法"}), 400
+
+    paper = request.form.get("paper") or "a4"
+    try:
+        page_size_inch(paper, request.form.get("orientation") or "portrait")
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
 
     if crop_w <= 0 or crop_h <= 0:
         return jsonify({"error": "裁剪宽高必须大于 0"}), 400
@@ -68,7 +97,8 @@ def export_pdf():
         cropped = im.crop((x1, y1, x2, y2))
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         base_name = os.path.splitext(os.path.basename(f.filename))[0]
-        out_name = f"{base_name}_view_{ts}.pdf"
+        paper_tag = (paper or "a4").lower().strip()
+        out_name = f"{base_name}_view_{paper_tag}_{ts}.pdf"
         out_path = os.path.join(tmp_dir, out_name)
         # resolution 控制 PDF 中的 DPI
         cropped.save(out_path, "PDF", resolution=dpi)
@@ -80,7 +110,7 @@ def export_pdf():
 def tile_export():
     """
     接收整张大图 + 分页参数（行列数、方向、DPI），
-    生成多页 A4 PDF（尽量铺满页面，按中心裁切，避免额外白边）。
+    生成多页 PDF（尽量铺满页面，按中心裁切，避免额外白边）。
     """
     if "image" not in request.files:
         return jsonify({"error": "缺少图片文件"}), 400
@@ -108,14 +138,15 @@ def tile_export():
         return jsonify({"error": "分页参数不合法"}), 400
 
     orientation = (request.form.get("orientation", "portrait") or "portrait").lower()
+    paper = request.form.get("paper") or "a4"
+    try:
+        page_w_inch, page_h_inch = page_size_inch(paper, orientation)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
     cols = max(1, cols)
     rows = max(1, rows)
     dpi = max(72, dpi)
-
-    if orientation == "landscape":
-        page_w_inch, page_h_inch = A4_HEIGHT_INCH, A4_WIDTH_INCH
-    else:
-        page_w_inch, page_h_inch = A4_WIDTH_INCH, A4_HEIGHT_INCH
 
     page_w_px = int(round(page_w_inch * dpi))
     page_h_px = int(round(page_h_inch * dpi))
@@ -129,7 +160,7 @@ def tile_export():
     with Image.open(img_path) as im:
         im = im.convert("RGB")
         src_w, src_h = im.size
-        
+
         # 如果指定了整体截取区域，先裁剪
         if has_crop:
             x1 = max(0, min(crop_x, src_w))
@@ -139,8 +170,8 @@ def tile_export():
             if x2 > x1 and y2 > y1:
                 im = im.crop((x1, y1, x2, y2))
                 src_w, src_h = im.size
-        
-        # 为了尽量铺满整个 N×M A4 区域，使用类似 CSS cover 的策略：按较大比例缩放并居中裁切
+
+        # 为了尽量铺满整个 N×M 页面区域，使用类似 CSS cover 的策略：按较大比例缩放并居中裁切
         scale = max(total_w / src_w, total_h / src_h)
         scaled_w = int(round(src_w * scale))
         scaled_h = int(round(src_h * scale))
@@ -164,7 +195,8 @@ def tile_export():
 
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         base_name = os.path.splitext(os.path.basename(f.filename))[0]
-        out_name = f"{base_name}_A4_{cols}x{rows}_{ts}.pdf"
+        paper_tag = paper.lower().strip()
+        out_name = f"{base_name}_{paper_tag.upper()}_{cols}x{rows}_{ts}.pdf"
         out_path = os.path.join(tmp_dir, out_name)
 
         first, *rest = tiles
@@ -182,5 +214,3 @@ def tile_export():
 if __name__ == "__main__":
     # 默认本地开发使用
     app.run(host="127.0.0.1", port=5000, debug=True)
-
-

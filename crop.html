@@ -2,14 +2,14 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <title>大图 A4 取景裁切导出 PDF</title>
+  <title>大图 A3/A4 取景裁切导出 PDF</title>
   <link rel="stylesheet" href="crop.css" />
 </head>
 <body>
   <header>
     <div>
-      <h1>大图 A4 取景裁切 → PDF</h1>
-      <span>拖动 A4 比例取景框 + 缩放大图，保存当前视野为单页 PDF。</span>
+      <h1>大图 A3/A4 取景裁切 → PDF</h1>
+      <span>拖动比例取景框 + 缩放大图；支持图片与 PDF；可拖入文件到右侧预览区。</span>
     </div>
     <span style="font-size:12px;color:#9ca3af;">本地运行 · 图片只在本机处理</span>
   </header>
@@ -18,22 +18,37 @@
     <section class="panel">
       <h2><span class="dot"></span>参数与导出</h2>
       <p class="desc">
-        1. 选择图片 → 2. 鼠标拖动取景框（或右下角缩放，保持 A4 比例） → 3. 点"导出当前视野为 PDF"。
+        1. 选择或拖入图片 / PDF → 2. 调整取景框 → 3. 导出 PDF。（PDF 会先栅格化为图片再裁切）
       </p>
 
       <div class="field">
-        <label for="imageInput">选择大图（JPG/PNG）：</label>
-        <input id="imageInput" type="file" accept="image/*" />
-        <small>推荐高分辨率图片，以获得更清晰的打印效果。</small>
+        <label for="imageInput">选择文件（图片或 PDF）：</label>
+        <input id="imageInput" type="file" accept="image/*,.pdf,application/pdf" />
+        <small>推荐高分辨率图片；PDF 默认渲染第 1 页，可改页码后重新渲染。</small>
+      </div>
+
+      <div class="field">
+        <label for="paper">纸张规格：</label>
+        <select id="paper">
+          <option value="a4" selected>A4</option>
+          <option value="a3">A3</option>
+        </select>
+        <small id="paperDimHint">竖版 A4：8.27 × 11.69 in</small>
       </div>
 
       <div class="field">
         <label for="orientation">纸张方向：</label>
         <select id="orientation">
-          <option value="portrait" selected>A4 竖版（8.27 × 11.69 in）</option>
-          <option value="landscape">A4 横版（11.69 × 8.27 in）</option>
+          <option value="portrait" selected>竖版</option>
+          <option value="landscape">横版</option>
         </select>
         <small id="orientationHint">单页/分页模式均适用</small>
+      </div>
+
+      <div class="field" id="pdfPageRow" style="display:none;">
+        <label for="pdfPage">PDF 渲染页码：</label>
+        <input id="pdfPage" type="number" min="1" value="1" />
+        <small>修改后失焦或回车将重新渲染当前 PDF 的该页。</small>
       </div>
 
       <div class="field">
@@ -54,7 +69,7 @@
       </div>
 
       <div class="field" id="tileSettings" style="display:none;">
-        <label>分页裁剪（按多页 A4 导出）：</label>
+        <label>分页裁剪（按多页导出）：</label>
         <div style="display:flex; gap:6px; margin-bottom:8px;">
           <div style="flex:1;">
             <input id="cols" type="number" min="1" value="2" />
@@ -74,29 +89,29 @@
           <span id="zoomLabel">100%</span>
         </label>
         <input id="zoom" type="range" min="1" max="100" value="100" />
-        <button id="fitWindowBtn" style="width:100%;margin-top:6px;background:linear-gradient(90deg,#6366f1,#4f46e5);box-shadow:0 8px 20px rgba(79,70,229,0.5);font-size:12px;padding:6px 12px;">
-          适应窗口大小
+        <button id="fitWindowBtn" type="button" style="width:100%;margin-top:6px;background:linear-gradient(90deg,#6366f1,#4f46e5);box-shadow:0 8px 20px rgba(79,70,229,0.5);font-size:12px;padding:6px 12px;">
+          一键适应屏幕（含取景框）
         </button>
       </div>
 
-      <button id="exportBtn" disabled style="width:100%;">导出当前视野为 PDF</button>
-      <button id="exportTilesBtn" disabled style="display:none;width:100%;margin-top:8px;background:linear-gradient(90deg,#3b82f6,#2563eb);box-shadow:0 10px 25px rgba(37,99,235,0.55);">
+      <button id="exportBtn" type="button" disabled style="width:100%;">导出当前视野为 PDF</button>
+      <button id="exportTilesBtn" type="button" disabled style="display:none;width:100%;margin-top:8px;background:linear-gradient(90deg,#3b82f6,#2563eb);box-shadow:0 10px 25px rgba(37,99,235,0.55);">
         按分页导出多页 PDF
       </button>
 
       <div class="meta" id="meta">
         <div><strong>原图：</strong><span id="origSize">尚未选择</span></div>
-        <div><strong>取景框比例：</strong><span id="boxRatio">A4：固定</span></div>
-        <div><strong>提示：</strong>单页导出为当前取景框区域；分页导出为整张大图裁成 N×M 页 A4（尽量铺满，无额外白边）。</div>
+        <div><strong>取景框比例：</strong><span id="boxRatio">—</span></div>
+        <div><strong>提示：</strong>单页导出为当前取景框区域；分页导出将截取区域裁成 N×M 页所选纸张（尽量铺满）。</div>
       </div>
     </section>
 
     <section class="preview-panel">
       <div class="preview-toolbar">
         <span class="badge">交互取景预览</span>
-        <span>拖动大图或取景框调整位置，右下角小圆点可拉伸取景框（始终保持 A4 比例）。</span>
+        <span>可拖入文件到下方区域；拖动大图或取景框；⌘/Alt + 滚轮缩放。</span>
       </div>
-      <div class="preview-container">
+      <div class="preview-container" id="previewContainer">
         <div class="image-stage mode-crop" id="stage">
           <img id="image" alt="预览图片" style="display:none;" />
           <div id="blurOverlayTop" class="blur-overlay blur-overlay-top" style="display:none;"></div>
@@ -115,14 +130,13 @@
           <div class="tile-grid" id="tileGrid"></div>
           <div class="hint" id="hint">
             <strong>尚未加载图片</strong>
-            <span>请先在左侧选择一张大图，然后拖动 A4 取景框到你想打印的区域。</span>
+            <span>请选择左侧文件，或将图片 / PDF 拖入此区域。</span>
           </div>
         </div>
       </div>
     </section>
   </main>
 
-  <script src="crop.js"></script>
+  <script type="module" src="crop.js"></script>
 </body>
 </html>
-

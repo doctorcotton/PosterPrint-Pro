@@ -172,6 +172,11 @@ button:disabled {
   display: flex;
   align-items: stretch;
   justify-content: center;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.preview-container.drag-over {
+  border-color: rgba(56, 189, 248, 0.85);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.35), 0 12px 36px rgba(8, 47, 73, 0.65);
 }
 .image-stage {
   position: relative;
