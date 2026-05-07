@@ -12,7 +12,7 @@
 - **分页打印**：将大图自动分割成 N×M 页所选纸张（A3/A4），拼起来就是完整海报
 - **纸张规格**：支持 **A4** 与 **A3**，可与竖版 / 横版组合
 - **拖拽载入**：将图片或 PDF 拖入右侧预览区即可加载
-- **PDF 载入**：在浏览器内用 PDF.js 将指定页栅格化为图片，再沿用原有裁切与导出流程（需能访问 jsDelivr CDN；完全离线内网请自行把 `pdfjs-dist` 静态文件放到项目中并改 `crop.js` 引用路径）
+- **PDF 载入**：在浏览器内用 PDF.js（`pdfjs-dist`，经 Vite 与主脚本一并打包）将指定页栅格化为图片，再沿用原有裁切与导出流程；**无需再访问 jsDelivr CDN**，内网离线可直接使用（前提是页面资源已由本机 Flask 提供）
 - **适应屏幕**：「一键适应屏幕（含取景框）」按 **整图 ∪ 取景框（分页模式下为截取框）** 一并缩放到可视区域内
 - **纸张方向**：支持竖版（Portrait）和横版（Landscape）两种方向
 - **自定义 DPI**：可调节打印分辨率（默认 300 DPI）
@@ -113,7 +113,7 @@ python3 crop_server.py
 
 ### 4. 导出 PDF
 
-点击导出按钮下载 PDF。若进度卡住或提示 `blob:` /「应使用 HTTPS」，请参阅下方常见问题。
+点击导出按钮后，前端会先 `POST /export_prepare` 或 `/tile_export_prepare` 生成 PDF，再导航到 `GET /download/<token>/<文件名>`，由浏览器按服务端的 `Content-Disposition: attachment` 保存 PDF（**不再使用 `blob:` 链接或异步后的 `<a>.click()` 触发下载**）。Docker 部署下若页面来自 `http://局域网 IP:15234`，下载会自动切到 `https://同一 IP:15235/download/...`，避开 Chrome 对 HTTP 下载的拦截。若仍异常，请参阅下方常见问题。
 
 ---
 
@@ -134,7 +134,9 @@ python3 crop_server.py
 ├── crop_server.py        # Flask 后端服务
 ├── crop.html             # 前端页面
 ├── crop.css              # 样式文件
-├── crop.js               # 前端逻辑（ES Module + PDF.js）
+├── src/                  # 前端 TypeScript 源码（crop.ts、paper.ts 等）
+├── dist/                 # Vite 构建产物（crop.html、assets/*、pdf worker，已纳入版本库便于仅 Python 启动）
+├── package.json          # 前端依赖与 npm 脚本
 ├── tests/                # pytest 用例
 ├── pytest.ini            # pytest 配置
 ├── requirements-dev.txt  # 开发依赖（pytest）
@@ -144,6 +146,25 @@ python3 crop_server.py
 ├── start-docker.sh       # Docker 一键启动脚本
 ├── entrypoint.py         # 容器启动脚本（含飞书通知）
 └── README.md             # 本文档
+```
+
+### 前端开发与构建（TypeScript + Vite）
+
+生产环境由 Flask 提供 [`dist/crop.html`](dist/crop.html) 及 `dist/assets/*`，修改 `src/` 或 [`crop.css`](crop.css) 后需执行 `npm run build` 再仅用 Python 启动。
+
+**热更新开发（推荐）**：开两个终端——**终端 A**：`python3 run_crop_app.py`（后端 **5000**）；**终端 B**：`npm run dev`（Vite **5173**，带 HMR）。浏览器打开 **`http://localhost:5173/crop.html`**，`/export_prepare`、`/tile_export_prepare` 与 `/download` 会由 Vite 代理到本机 Flask。
+
+```bash
+npm install
+npm run build          # 一次性构建（更新 dist/，供仅 Python / Docker 使用）
+npm run dev            # Vite 开发服务器 + 热更新（需同时运行 Flask）
+npm run build:watch    # 仅监听构建写入 dist/，仍用 http://127.0.0.1:5000/ 访问
+```
+
+前端纸张尺寸与后端 [`crop_server.page_size_inch`](crop_server.py) 对齐逻辑的单测：
+
+```bash
+npm test
 ```
 
 ### 运行测试
@@ -175,18 +196,25 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest tests/ -v
 
 ### 手动启动
 
+构建镜像前请在项目根目录执行 **`npm run build`**，保证 `dist/` 为最新（容器内只带 `dist/`，不再复制根目录 `crop.html` / `crop.css`）。
+
 ```bash
 # 先获取本机 IP
 export HOST_IP=$(ipconfig getifaddr en0)
 
-# 启动服务
+# 启动服务（HOST_IP 会写入 HTTPS 证书 SAN，局域网访问建议显式设置）
 docker-compose up -d --build
 ```
 
 ### 访问地址
 
 - 本机访问：`http://localhost:15234`
-- 局域网其他电脑访问：`http://你的电脑IP:15234`
+- 局域网 HTTP 页面：`http://192.168.1.10:15234`
+- 局域网 HTTPS 页面/下载：`https://192.168.1.10:15235`
+
+容器启动时会在 **`docker-compose logs`** 中打印探测到的 IPv4 与可选环境变量 `HOST_IP`、`PUBLIC_URL`。局域网设备优先使用你在路由器/宿主机上看到的 **同一网段 IP**；容器内的 `172.x` 等地址通常仅在 Docker 网络内可达，其它手机连不上属正常现象，请在宿主机执行 `ipconfig` / `ifconfig` 或设置 `HOST_IP`。
+
+Chrome 可能拦截局域网 HTTP 下载并提示 `loaded over an insecure connection`。Docker 会同时启动 HTTPS 端口 `15235`；前端在局域网 HTTP 页面上会自动把下载 URL 切到 HTTPS。若使用自签证书，首次打开 `https://你的IP:15235` 时需要在浏览器证书警告页手动继续。若你有正式证书，可把 `server.crt` 与 `server.key` 放到 `certs/` 或通过 `SSL_CERT_FILE`、`SSL_KEY_FILE` 指定。
 
 ### 🔔 飞书通知
 
@@ -232,13 +260,12 @@ A: 手动在浏览器中访问 **http://127.0.0.1:5000**
 
 A: 可以修改 `run_crop_app.py` 中的端口号，或者关闭占用该端口的程序。
 
-### Q: 导出 PDF 下载卡住，或提示 blob / 不安全 / 需要 HTTPS
+### Q: 导出 PDF 下载卡住，或无反应
 
-A: 常见原因有两类：（1）浏览器下载管理器与 `blob:` 临时链接的时序问题——实现上已 **延迟释放** blob URL；可重试或换用 Chrome/Edge 最新版。（2）页面通过 **`http://局域网 IP`** 访问时，部分环境会限制非安全上下文下的下载；应在网关做 **HTTPS 反代**（Nginx、Caddy 等）或仅在受信任的 `https://` / `localhost` 下使用。
+A: 导出流程为 **token + GET 导航下载**（`POST …_prepare` → 导航到 `GET /download/...`），请在浏览器 **开发者工具 Console** 查看以 `[download]` 开头的日志。若 Chrome 提示 `loaded over an insecure connection`，说明 HTTP 下载被拦截，请使用 `https://宿主机局域网IP:15235`，或从 HTTP 页面重新点击导出让前端自动跳到 HTTPS 下载端口。若使用自签证书，首次访问 HTTPS 地址需要手动继续。若 `/download/...` 返回 500，请查看容器日志。同一局域网请确保其它设备访问的是 **宿主机局域网 IP**，而不是容器内部的 `172.x` 地址。
 
 ---
 
 ## 📄 License
 
 MIT License - 随便用，开心就好 🎉
-

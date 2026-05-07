@@ -7,17 +7,19 @@ services:
     ports:
       # 映射到主机的 15234 端口，局域网内其他用户可通过 http://你的IP:15234 访问
       - "15234:5000"
+      # HTTPS 下载入口；Chrome 拦截 HTTP 下载时使用 https://你的IP:15235
+      - "15235:5443"
     restart: unless-stopped
     # 可选：挂载临时目录用于存储生成的文件
     volumes:
       - poster_temp:/tmp
+      - ./certs:/app/certs:ro
     environment:
       - TZ=Asia/Shanghai
-      # 设置宿主机 IP，用于发送飞书通知
-      # 可以手动指定，或者使用下面的命令自动获取：
-      # export HOST_IP=$(ipconfig getifaddr en0) && docker-compose up -d
-      - HOST_IP=${HOST_IP:-请设置HOST_IP}
+      # 可选：宿主机在局域网中的 IP，用于飞书通知中的访问地址；未设置时由容器内自动探测并打印在日志中
+      - HOST_IP=${HOST_IP:-}
+      # 可选：若已配置反向代理 / 固定域名，可设置正式访问基址（会显示在启动日志与 /trust/info.json，前端当前不使用）
+      - PUBLIC_URL=${PUBLIC_URL:-}
 
 volumes:
   poster_temp:
-

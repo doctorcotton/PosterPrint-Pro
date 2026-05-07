@@ -24,4 +24,5 @@ echo ""
 echo "✅ 服务已启动！"
 echo "📍 本机访问: http://localhost:15234"
 echo "📍 局域网访问: http://$HOST_IP:15234"
-
+echo "🔒 HTTPS 访问: https://$HOST_IP:15235"
+echo "   如果 Chrome 提示 HTTP 下载不安全，请改用 HTTPS 地址；首次访问自签证书页面时需要手动继续。"

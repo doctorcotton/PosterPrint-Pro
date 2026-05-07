@@ -1,0 +1,20 @@
+{
+  "name": "poster-crop-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "build:watch": "vite build --watch",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.11",
+    "vitest": "^3.0.5"
+  },
+  "dependencies": {
+    "pdfjs-dist": "4.8.69"
+  }
+}
