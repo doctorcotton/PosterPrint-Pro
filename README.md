@@ -12,12 +12,63 @@
 - **分页打印**：将大图自动分割成 N×M 页所选纸张（A3/A4），拼起来就是完整海报
 - **纸张规格**：支持 **A4** 与 **A3**，可与竖版 / 横版组合
 - **拖拽载入**：将图片或 PDF 拖入右侧预览区即可加载
-- **PDF 载入**：在浏览器内用 PDF.js（`pdfjs-dist`，经 Vite 与主脚本一并打包）将指定页栅格化为图片，再沿用原有裁切与导出流程；**无需再访问 jsDelivr CDN**，内网离线可直接使用（前提是页面资源已由本机 Flask 提供）
+- **PDF 载入**：在浏览器内用 PDF.js（`pdfjs-dist`，经 Vite 与主脚本一并打包）将指定页栅格化为图片，再沿用原有裁切与导出流程；**无需再访问 jsDelivr CDN**
 - **适应屏幕**：「一键适应屏幕（含取景框）」按 **整图 ∪ 取景框（分页模式下为截取框）** 一并缩放到可视区域内
 - **纸张方向**：支持竖版（Portrait）和横版（Landscape）两种方向
 - **自定义 DPI**：可调节打印分辨率（默认 300 DPI）
 - **实时预览**：所见即所得，调整参数后立即预览效果
 - **一键启动**：自动检测并安装依赖，自动打开浏览器
+
+---
+
+## ☁️ Vercel Serverless 部署（当前推荐）
+
+当前版本已经改造成 **Vercel 静态前端 + Serverless Functions + Private Blob** 架构：
+
+- 浏览器先把源图片 **直传到 Vercel Blob**
+- Python Serverless Function 从私有 Blob 读取图片并生成 PDF
+- Node Function 为结果 PDF 签发 **短期下载链接**
+
+这样可以避开 Vercel Function 对请求体 **4.5 MB** 的限制，也不再依赖本地磁盘跨请求保留临时文件。
+
+### 首次部署
+
+```bash
+npm install
+vercel link
+vercel --prod
+```
+
+### 必需的存储配置
+
+部署前请先在 Vercel 项目里创建 **Private Blob**：
+
+1. 打开 Vercel 项目
+2. 进入 **Storage**
+3. 创建 **Blob**
+4. 选择 **Private**
+5. 让它连接到当前项目
+
+连接完成后，项目会自动获得 Blob 访问能力（新项目通常走 OIDC；旧方式则会注入 `BLOB_READ_WRITE_TOKEN`）。
+
+### 本地联调
+
+推荐直接使用：
+
+```bash
+vercel dev
+```
+
+默认访问：`http://localhost:3000`
+
+如果你只想改前端交互，也可以同时开：
+
+```bash
+npm run dev
+vercel dev
+```
+
+此时浏览器打开 `http://localhost:5173/crop.html`，Vite 会把 `/api/*` 代理到本机 `3000` 端口的 Vercel dev server。
 
 ---
 
@@ -113,7 +164,7 @@ python3 crop_server.py
 
 ### 4. 导出 PDF
 
-点击导出按钮后，前端会先 `POST /export_prepare` 或 `/tile_export_prepare` 生成 PDF，再导航到 `GET /download/<token>/<文件名>`，由浏览器按服务端的 `Content-Disposition: attachment` 保存 PDF（**不再使用 `blob:` 链接或异步后的 `<a>.click()` 触发下载**）。Docker 部署下若页面来自 `http://局域网 IP:15234`，下载会自动切到 `https://同一 IP:15235/download/...`，避开 Chrome 对 HTTP 下载的拦截。若仍异常，请参阅下方常见问题。
+点击导出按钮后，前端会先把当前源图上传到 **Private Blob**，再调用 `/api/export_prepare` 或 `/api/tile_export_prepare` 生成 PDF，最后调用 `/api/blob-download-url` 换取一个 **短期签名下载链接** 并触发浏览器原生下载。
 
 ---
 
@@ -129,13 +180,15 @@ python3 crop_server.py
 
 ```
 打印海报插件/
+├── api/                 # Vercel Serverless Functions（Python + Node）
+├── vercel.json          # Vercel 构建、路由、函数配置
 ├── 启动.bat              # Windows 一键启动
 ├── run_crop_app.py       # macOS/Linux 启动脚本
-├── crop_server.py        # Flask 后端服务
+├── crop_server.py        # 旧版本地 Flask 后端（兼容保留）
 ├── crop.html             # 前端页面
 ├── crop.css              # 样式文件
 ├── src/                  # 前端 TypeScript 源码（crop.ts、paper.ts 等）
-├── dist/                 # Vite 构建产物（crop.html、assets/*、pdf worker，已纳入版本库便于仅 Python 启动）
+├── dist/                 # Vite 构建产物（Vercel 静态输出目录）
 ├── package.json          # 前端依赖与 npm 脚本
 ├── tests/                # pytest 用例
 ├── pytest.ini            # pytest 配置
@@ -150,18 +203,19 @@ python3 crop_server.py
 
 ### 前端开发与构建（TypeScript + Vite）
 
-生产环境由 Flask 提供 [`dist/crop.html`](dist/crop.html) 及 `dist/assets/*`，修改 `src/` 或 [`crop.css`](crop.css) 后需执行 `npm run build` 再仅用 Python 启动。
+生产环境由 **Vercel 静态资源 + Serverless Functions** 提供，修改 `src/` 或 [`crop.css`](crop.css) 后执行 `npm run build` 即可得到最新静态产物。
 
-**热更新开发（推荐）**：开两个终端——**终端 A**：`python3 run_crop_app.py`（后端 **5000**）；**终端 B**：`npm run dev`（Vite **5173**，带 HMR）。浏览器打开 **`http://localhost:5173/crop.html`**，`/export_prepare`、`/tile_export_prepare` 与 `/download` 会由 Vite 代理到本机 Flask。
+**本地联调（推荐）**：直接运行 `vercel dev`。如果需要前端 HMR，可额外打开 `npm run dev`，浏览器访问 **`http://localhost:5173/crop.html`**，`/api/*` 会由 Vite 代理到本机 `3000` 端口的 Vercel dev server。
 
 ```bash
 npm install
-npm run build          # 一次性构建（更新 dist/，供仅 Python / Docker 使用）
-npm run dev            # Vite 开发服务器 + 热更新（需同时运行 Flask）
-npm run build:watch    # 仅监听构建写入 dist/，仍用 http://127.0.0.1:5000/ 访问
+npm run build          # 一次性构建（更新 dist/）
+npm run dev            # Vite 开发服务器 + 热更新
+vercel dev             # 本地运行 Vercel Functions + 静态站点
+npm run build:watch    # 仅监听构建写入 dist/
 ```
 
-前端纸张尺寸与后端 [`crop_server.page_size_inch`](crop_server.py) 对齐逻辑的单测：
+前端纸张尺寸与 serverless 导出层 `page_size_inch` 对齐逻辑的单测：
 
 ```bash
 npm test
@@ -179,6 +233,8 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest tests/ -v
 ---
 
 ## 🐳 Docker 部署（局域网共享）
+
+> 下面这部分是 **旧版 Flask / Docker 兼容部署路径**。当前推荐优先使用上面的 **Vercel Serverless**。
 
 如果你想让局域网内的其他用户也能访问使用，可以通过 Docker 部署。
 

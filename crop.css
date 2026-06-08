@@ -449,3 +449,29 @@ button:disabled {
 .mode-toggle-row.active-tile .mode-label-right {
   color: #22c55e;
 }
+.export-status {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(15, 23, 42, 0.72);
+  color: #cbd5e1;
+  font-size: 12px;
+  line-height: 1.5;
+  min-height: 40px;
+}
+.export-status[data-tone="working"] {
+  color: #e0f2fe;
+  border-color: rgba(56, 189, 248, 0.45);
+  background: rgba(3, 105, 161, 0.18);
+}
+.export-status[data-tone="error"] {
+  color: #fee2e2;
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(127, 29, 29, 0.2);
+}
+.export-status[data-tone="success"] {
+  color: #dcfce7;
+  border-color: rgba(74, 222, 128, 0.42);
+  background: rgba(20, 83, 45, 0.24);
+}

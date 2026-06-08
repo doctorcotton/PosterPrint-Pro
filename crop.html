@@ -10,7 +10,7 @@
       <h1>大图 A3/A4 取景裁切 → PDF</h1>
       <span>拖动比例取景框 + 缩放大图；支持图片与 PDF；可拖入文件到右侧预览区。</span>
     </div>
-    <span style="font-size:12px;color:#9ca3af;">本地运行 · 图片只在本机处理</span>
+    <span style="font-size:12px;color:#9ca3af;">Vercel Serverless · 文件仅用于当前导出流程</span>
   </header>
 
   <main>
@@ -97,6 +97,9 @@
       <button id="exportTilesBtn" type="button" disabled style="display:none;width:100%;margin-top:8px;background:linear-gradient(90deg,#3b82f6,#2563eb);box-shadow:0 10px 25px rgba(37,99,235,0.55);">
         按分页导出多页 PDF
       </button>
+      <div id="exportStatus" class="export-status" aria-live="polite">
+        等待选择文件
+      </div>
 
       <div class="meta" id="meta">
         <div><strong>原图：</strong><span id="origSize">尚未选择</span></div>

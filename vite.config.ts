@@ -20,16 +20,8 @@ export default defineConfig({
     port: 5173,
     open: "/crop.html",
     proxy: {
-      "/export_prepare": {
-        target: "http://127.0.0.1:5000",
-        changeOrigin: true,
-      },
-      "/tile_export_prepare": {
-        target: "http://127.0.0.1:5000",
-        changeOrigin: true,
-      },
-      "/download": {
-        target: "http://127.0.0.1:5000",
+      "/api": {
+        target: "http://127.0.0.1:3000",
         changeOrigin: true,
       },
     },

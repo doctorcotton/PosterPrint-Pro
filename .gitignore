@@ -2,3 +2,5 @@ node_modules/
 certs/*.pem
 certs/*.key
 certs/*.crt
+.vercel
+.env*

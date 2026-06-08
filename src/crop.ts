@@ -4,6 +4,22 @@
 import "../crop.css";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfjsWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
+import {
+  buildSourceFingerprint,
+  ensureRemoteSource,
+  prepareSingleExport,
+  prepareTileExport,
+  requestDownloadUrl,
+  type UploadedSource,
+} from "./export-client";
+import {
+  buildPdfRasterizePlan,
+  computeOutputPixelSize,
+  evaluateExportQuality,
+  scaleCropRect,
+  type CropRect,
+  type ExportMode,
+} from "./export-resolution";
 import { pageSizeInch, paperAspectRatio } from "./paper";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
@@ -40,6 +56,7 @@ const paperSelect = requireEl<HTMLSelectElement>("paper");
 const paperDimHint = requireEl<HTMLElement>("paperDimHint");
 const exportBtn = requireEl<HTMLButtonElement>("exportBtn");
 const exportTilesBtn = requireEl<HTMLButtonElement>("exportTilesBtn");
+const exportStatus = requireEl<HTMLElement>("exportStatus");
 const origSizeSpan = requireEl<HTMLElement>("origSize");
 const boxRatioSpan = requireEl<HTMLElement>("boxRatio");
 const colsInput = requireEl<HTMLInputElement>("cols");
@@ -62,6 +79,10 @@ let origHeight = 0;
 let currentFile: File | null = null;
 let lastPdfFile: File | null = null;
 let currentMode: "crop" | "tile" = "crop";
+let uploadedSource: UploadedSource | null = null;
+let uploadSourceTask:
+  | { fingerprint: string; task: Promise<UploadedSource> }
+  | null = null;
 
 let imgScale = 1.0;
 let imgOffsetX = 0;
@@ -110,6 +131,54 @@ let resizeTileCropOrigH = 0;
 let resizeTileCropHandle = "";
 
 let resizeFitTimer = 0;
+
+function setExportStatus(
+  message: string,
+  tone: "idle" | "working" | "error" | "success" = "idle"
+): void {
+  exportStatus.textContent = message;
+  exportStatus.dataset.tone = tone;
+}
+
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function resetRemoteSourceCache(): void {
+  uploadedSource = null;
+  uploadSourceTask = null;
+}
+
+setExportStatus("等待选择文件", "idle");
+
+async function ensureUploadedSource(file: File): Promise<UploadedSource> {
+  const fingerprint = buildSourceFingerprint(file);
+  if (uploadedSource?.fingerprint === fingerprint) {
+    return uploadedSource;
+  }
+  if (uploadSourceTask?.fingerprint === fingerprint) {
+    return uploadSourceTask.task;
+  }
+
+  setExportStatus("正在上传源文件到 Vercel Blob…", "working");
+  const task = ensureRemoteSource(file, fingerprint, (percentage) => {
+    setExportStatus(
+      `正在上传源文件到 Vercel Blob…${Math.round(percentage)}%`,
+      "working"
+    );
+  })
+    .then((result) => {
+      uploadedSource = result;
+      return result;
+    })
+    .finally(() => {
+      if (uploadSourceTask?.fingerprint === fingerprint) {
+        uploadSourceTask = null;
+      }
+    });
+  uploadSourceTask = { fingerprint, task };
+  return task;
+}
 
 /** 当前选中纸张的宽高（英寸），已考虑竖版/横版 */
 function getPageInches(): { w: number; h: number } {
@@ -605,9 +674,11 @@ function finishImageLoaded(): void {
   if (currentMode === "crop") {
     updateBlurMask();
   }
+  setExportStatus("文件已就绪，可以开始导出 PDF", "idle");
 }
 
 function loadImageFromFile(file: File): void {
+  resetRemoteSourceCache();
   currentFile = file;
   lastPdfFile = null;
   pdfPageRow.style.display = "none";
@@ -631,7 +702,22 @@ function loadImageFromFile(file: File): void {
   reader.readAsDataURL(file);
 }
 
-async function rasterizePdfPageToImage(pdfFile: File): Promise<void> {
+interface RasterizedPdfPage {
+  file: File;
+  width: number;
+  height: number;
+}
+
+interface RasterizePdfOptions {
+  targetWidth?: number;
+  targetHeight?: number;
+  replaceCurrentFile?: boolean;
+}
+
+async function rasterizePdfPageToImage(
+  pdfFile: File,
+  options: RasterizePdfOptions = {}
+): Promise<RasterizedPdfPage> {
   const buf = await pdfFile.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
   const numPages = pdf.numPages;
@@ -646,6 +732,12 @@ async function rasterizePdfPageToImage(pdfFile: File): Promise<void> {
   const page = await pdf.getPage(pageNum);
   const baseVp = page.getViewport({ scale: 1 });
   let scale = 2;
+  if (options.targetWidth && options.targetHeight) {
+    scale = Math.min(
+      options.targetWidth / baseVp.width,
+      options.targetHeight / baseVp.height
+    );
+  }
   let vw = baseVp.width * scale;
   let vh = baseVp.height * scale;
   const maxDim = Math.max(vw, vh);
@@ -673,23 +765,38 @@ async function rasterizePdfPageToImage(pdfFile: File): Promise<void> {
 
   const baseName = pdfFile.name.replace(/\.pdf$/i, "") || "document";
   const pngName = `${baseName}_p${pageNum}.png`;
-  const pngFile = new File([blob], pngName, { type: "image/png" });
-  currentFile = pngFile;
+  const pngFile = new File([blob], pngName, {
+    type: "image/png",
+    lastModified: pdfFile.lastModified,
+  });
+  const result = {
+    file: pngFile,
+    width: canvas.width,
+    height: canvas.height,
+  };
 
-  const url = URL.createObjectURL(blob);
-  imageEl.onload = () => {
-    URL.revokeObjectURL(url);
-    finishImageLoaded();
-  };
-  imageEl.onerror = () => {
-    URL.revokeObjectURL(url);
-    alert("PDF 转图片后无法显示。");
-  };
-  imageEl.src = url;
+  if (options.replaceCurrentFile !== false) {
+    resetRemoteSourceCache();
+    currentFile = pngFile;
+
+    const url = URL.createObjectURL(blob);
+    imageEl.onload = () => {
+      URL.revokeObjectURL(url);
+      finishImageLoaded();
+    };
+    imageEl.onerror = () => {
+      URL.revokeObjectURL(url);
+      alert("PDF 转图片后无法显示。");
+    };
+    imageEl.src = url;
+  }
+
+  return result;
 }
 
 async function processSelectedFile(file: File): Promise<void> {
   if (!file) return;
+  setExportStatus("正在读取文件…", "working");
   if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
     lastPdfFile = file;
     try {
@@ -697,11 +804,13 @@ async function processSelectedFile(file: File): Promise<void> {
     } catch (err) {
       console.error(err);
       const msg = err instanceof Error ? err.message : String(err);
+      setExportStatus(`PDF 处理失败：${msg}`, "error");
       alert(`PDF 处理失败：${msg}`);
     }
   } else if (file.type.startsWith("image/")) {
     loadImageFromFile(file);
   } else {
+    setExportStatus("请选择图片文件或 PDF", "error");
     alert("请选择图片文件或 PDF。");
   }
 }
@@ -1041,112 +1150,147 @@ function computeCropOnOriginal(): {
   return { cropX, cropY, cropW, cropH };
 }
 
-/**
- * 通过同源 GET 导航触发浏览器原生下载。
- *
- * 历史上这里用 ``URL.createObjectURL(blob)`` + ``a.click()``，但 Chrome 117+
- * 在 HTTP 非安全上下文（局域网 IP）下会把 blob 触发的下载标记为
- * "insecure download" 并默默拦截，DevTools 里能看到
- * ``loaded over an insecure connection``。
- *
- * 即使改成同源 GET，若在局域网 IP 的 HTTP 页面上下载，部分 Chrome 策略仍会
- * 拦截并提示 ``loaded over an insecure connection``。Docker 部署会同时暴露
- * HTTPS 下载端口 15235；当前页面是 HTTP + 非 localhost 时，下载 URL 自动切到
- * ``https://同一主机:15235/download/...``。
- */
-
-/** 导出下载链路阶段（用于日志与 alert，不做静默吞错） */
-type DownloadFailureStage = "prepare" | "parseJson" | "network";
-
-function logDownloadStep(stage: string, payload: Record<string, unknown>): void {
-  console.info(`[download] ${stage}`, {
+/** 导出链路日志。 */
+function logExportStep(stage: string, payload: Record<string, unknown>): void {
+  console.info(`[export] ${stage}`, {
     ...payload,
     href: window.location.href,
-    protocol: window.location.protocol,
-    host: window.location.host,
-    isSecureContext: window.isSecureContext,
     ts: new Date().toISOString(),
   });
 }
 
-function logDownloadError(
+function logExportError(
   stage: string,
   err: unknown,
   extra: Record<string, unknown>
 ): void {
-  console.error(`[download] ${stage} failed`, { err, ...extra });
+  console.error(`[export] ${stage} failed`, { err, ...extra });
   if (err instanceof Error && err.stack) {
     console.error(err.stack);
   }
 }
 
-function buildFailureMessage(
-  stage: DownloadFailureStage,
-  ctx: Record<string, unknown>
-): string {
-  const lines: string[] = [];
-  lines.push(`阶段: ${stage}`);
-  if (typeof ctx.status === "number") {
-    lines.push(
-      `HTTP: ${ctx.status}${typeof ctx.statusText === "string" ? ` ${ctx.statusText}` : ""}`
-    );
-  }
-  lines.push(`页面: ${window.location.href}`);
-  if (typeof ctx.endpoint === "string") {
-    lines.push(`接口: ${ctx.endpoint}`);
-  }
-  if (typeof ctx.downloadUrl === "string") {
-    lines.push(`计划下载: ${ctx.downloadUrl}`);
-  }
-  if (typeof ctx.token === "string") {
-    lines.push(`token: ${ctx.token}`);
-  }
-  if (typeof ctx.filename === "string") {
-    lines.push(`filename: ${ctx.filename}`);
-  }
-  if (ctx.bodyError !== undefined && ctx.bodyError !== "") {
-    lines.push(`服务端: ${String(ctx.bodyError)}`);
-  }
-  if (ctx.error !== undefined) {
-    const msg =
-      ctx.error instanceof Error ? ctx.error.message : String(ctx.error);
-    lines.push(`错误: ${msg}`);
-  }
-  lines.push(
-    "若浏览器提示下载不安全，请改用 HTTPS 地址（Docker 默认 https://当前IP:15235）。"
-  );
-  return lines.join("\n");
-}
-
 function triggerNativeDownload(downloadUrl: string): void {
-  logDownloadStep("navigate-assign", { downloadUrl });
+  logExportStep("navigate-assign", { downloadUrl });
   window.location.assign(downloadUrl);
 }
 
-function buildDownloadUrl(token: string, filename: string): string {
-  const path = `/download/${encodeURIComponent(token)}/${encodeURIComponent(filename)}`;
-  const hostname = window.location.hostname;
-  const isLocalhost =
-    hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-  const shouldUseHttpsDownload =
-    window.location.protocol === "http:" && !isLocalhost;
+function parseSelectedDpi(): number {
+  return parseInt(dpiInput.value || "300", 10) || 300;
+}
 
-  if (!shouldUseHttpsDownload) {
-    return path;
+function getTileCropOnOriginal(): CropRect {
+  const imgRect = imageEl.getBoundingClientRect();
+  const tileCropRect = tileCropBox.getBoundingClientRect();
+  const scaleX = origWidth / imgRect.width;
+  const scaleY = origHeight / imgRect.height;
+  const cropX = Math.max(0, (tileCropRect.left - imgRect.left) * scaleX);
+  const cropY = Math.max(0, (tileCropRect.top - imgRect.top) * scaleY);
+  return {
+    cropX,
+    cropY,
+    cropW: Math.min(origWidth - cropX, tileCropRect.width * scaleX),
+    cropH: Math.min(origHeight - cropY, tileCropRect.height * scaleY),
+  };
+}
+
+async function prepareSourceForExport(options: {
+  mode: ExportMode;
+  rect: CropRect;
+  dpi: number;
+  cols?: number;
+  rows?: number;
+}): Promise<{
+  file: File;
+  sourceName: string;
+  rect: CropRect;
+  qualityWarning: string | null;
+  qualityMetrics: Record<string, unknown>;
+}> {
+  if (!currentFile) {
+    throw new Error("当前没有可导出的源文件");
   }
 
-  return `https://${hostname}:15235${path}`;
-}
+  const outputPixels = computeOutputPixelSize({
+    paper: paperSelect.value,
+    orientation: orientationSelect.value,
+    dpi: options.dpi,
+    mode: options.mode,
+    cols: options.cols,
+    rows: options.rows,
+  });
 
-interface PrepareResponse {
-  token: string;
-  filename: string;
-}
+  if (!lastPdfFile) {
+    const warning = evaluateExportQuality({
+      sourceCropWidth: options.rect.cropW,
+      sourceCropHeight: options.rect.cropH,
+      targetWidth: outputPixels.width,
+      targetHeight: outputPixels.height,
+      targetDpi: options.dpi,
+    });
+    return {
+      file: currentFile,
+      sourceName: currentFile.name,
+      rect: options.rect,
+      qualityWarning: warning?.message ?? null,
+      qualityMetrics: {
+        source_px: `${Math.round(options.rect.cropW)}x${Math.round(
+          options.rect.cropH
+        )}`,
+        target_px: `${outputPixels.width}x${outputPixels.height}`,
+        upscale_ratio: Number((warning?.upscaleRatio ?? 1).toFixed(4)),
+      },
+    };
+  }
 
-function isPrepareResponse(value: unknown): value is PrepareResponse {
-  if (!value || typeof value !== "object") return false;
-  const obj = value as Record<string, unknown>;
-  return typeof obj.token === "string" && typeof obj.filename === "string";
+  const plan = buildPdfRasterizePlan({
+    previewWidth: origWidth,
+    previewHeight: origHeight,
+    cropWidth: options.rect.cropW,
+    cropHeight: options.rect.cropH,
+    paper: paperSelect.value,
+    orientation: orientationSelect.value,
+    dpi: options.dpi,
+    mode: options.mode,
+    cols: options.cols,
+    rows: options.rows,
+    maxCanvasDim: MAX_CANVAS_DIM,
+  });
+  const rasterized = await rasterizePdfPageToImage(lastPdfFile, {
+    targetWidth: plan.rasterWidth,
+    targetHeight: plan.rasterHeight,
+    replaceCurrentFile: false,
+  });
+  const scaledRect = scaleCropRect(
+    options.rect,
+    { width: origWidth, height: origHeight },
+    { width: rasterized.width, height: rasterized.height }
+  );
+  const warning = evaluateExportQuality({
+    sourceCropWidth: scaledRect.cropW,
+    sourceCropHeight: scaledRect.cropH,
+    targetWidth: outputPixels.width,
+    targetHeight: outputPixels.height,
+    targetDpi: options.dpi,
+  });
+
+  return {
+    file: rasterized.file,
+    sourceName: lastPdfFile.name,
+    rect: scaledRect,
+    qualityWarning: warning?.message ?? null,
+    qualityMetrics: {
+      source_px: `${Math.round(scaledRect.cropW)}x${Math.round(
+        scaledRect.cropH
+      )}`,
+      target_px: `${outputPixels.width}x${outputPixels.height}`,
+      upscale_ratio: Number((warning?.upscaleRatio ?? 1).toFixed(4)),
+      preview_px: `${origWidth}x${origHeight}`,
+      desired_raster_px: `${plan.desiredRasterWidth}x${plan.desiredRasterHeight}`,
+      raster_px: `${rasterized.width}x${rasterized.height}`,
+      raster_clamped: plan.clamped,
+    },
+  };
 }
 
 exportBtn.addEventListener("click", async () => {
@@ -1156,9 +1300,8 @@ exportBtn.addEventListener("click", async () => {
     alert("当前取景框不在图片区域内，请稍微移动后重试。");
     return;
   }
-  const dpi = parseInt(dpiInput.value || "300", 10) || 300;
-  const endpoint = "/export_prepare";
-  logDownloadStep("start", {
+  const dpi = parseSelectedDpi();
+  logExportStep("start", {
     mode: "single",
     paper: paperSelect.value,
     orientation: orientationSelect.value,
@@ -1168,92 +1311,45 @@ exportBtn.addEventListener("click", async () => {
     fileName: currentFile.name,
   });
 
-  const form = new FormData();
-  form.append("image", currentFile);
-  form.append("crop_x", String(rect.cropX));
-  form.append("crop_y", String(rect.cropY));
-  form.append("crop_w", String(rect.cropW));
-  form.append("crop_h", String(rect.cropH));
-  form.append("dpi", String(dpi));
-  form.append("paper", paperSelect.value);
-  form.append("orientation", orientationSelect.value);
-
   exportBtn.disabled = true;
   exportBtn.textContent = "正在导出 PDF…";
-  const t0 = performance.now();
   try {
-    logDownloadStep("requestSent", { endpoint, t0 });
-    const resp = await fetch(endpoint, {
-      method: "POST",
-      body: form,
+    const preparedSource = await prepareSourceForExport({
+      mode: "single",
+      rect,
+      dpi,
     });
-    const elapsedMs = Math.round(performance.now() - t0);
-    logDownloadStep("responseHeaders", {
-      endpoint,
-      status: resp.status,
-      statusText: resp.statusText,
-      contentType: resp.headers.get("content-type"),
-      elapsedMs,
+    if (preparedSource.qualityWarning) {
+      setExportStatus(`清晰度提示：${preparedSource.qualityWarning}`, "idle");
+      console.warn("[export] quality-warning", preparedSource.qualityMetrics);
+    }
+    const source = await ensureUploadedSource(preparedSource.file);
+    setExportStatus("正在生成单页 PDF…", "working");
+    const prepared = await prepareSingleExport({
+      sourceUrl: source.url,
+      sourceName: preparedSource.sourceName,
+      cropX: preparedSource.rect.cropX,
+      cropY: preparedSource.rect.cropY,
+      cropW: preparedSource.rect.cropW,
+      cropH: preparedSource.rect.cropH,
+      dpi,
+      paper: paperSelect.value,
+      orientation: orientationSelect.value,
     });
-
-    if (!resp.ok) {
-      const data: { error?: string } = await resp.json().catch(() => ({}));
-      const msg = buildFailureMessage("prepare", {
-        status: resp.status,
-        statusText: resp.statusText,
-        bodyError: data.error ?? "",
-        endpoint,
-      });
-      logDownloadError("prepare", new Error(msg), {
-        status: resp.status,
-        endpoint,
-        bodyError: data.error,
-      });
-      alert(msg);
-      return;
-    }
-
-    let data: unknown;
-    try {
-      data = await resp.json();
-    } catch (err) {
-      const msg = buildFailureMessage("parseJson", {
-        status: resp.status,
-        endpoint,
-        error: err,
-      });
-      logDownloadError("parseJson", err, { endpoint });
-      alert(msg);
-      return;
-    }
-
-    if (!isPrepareResponse(data)) {
-      const msg = buildFailureMessage("parseJson", {
-        endpoint,
-        error: new Error("服务端返回 JSON 结构不符合 { token, filename }"),
-      });
-      logDownloadError(
-        "parseJson",
-        new Error("invalid PrepareResponse"),
-        { endpoint, raw: data }
-      );
-      alert(msg);
-      return;
-    }
-
-    logDownloadStep("prepareOk", {
-      token: data.token,
-      filename: data.filename,
+    setExportStatus("正在生成下载链接…", "working");
+    const downloadUrl = await requestDownloadUrl(prepared.pathname);
+    logExportStep("prepareOk", {
+      pathname: prepared.pathname,
+      filename: prepared.filename,
+      downloadUrl,
+      ...preparedSource.qualityMetrics,
     });
-    const downloadUrl = buildDownloadUrl(data.token, data.filename);
-    logDownloadStep("navigate", { downloadUrl });
+    setExportStatus(`导出已就绪：${prepared.filename}`, "success");
     triggerNativeDownload(downloadUrl);
   } catch (err) {
-    const msg = buildFailureMessage("network", {
-      endpoint,
-      error: err,
-    });
-    logDownloadError("network", err, { endpoint });
+    const msg = describeError(err);
+    logExportError("single-export", err, {});
+    setExportStatus(`导出失败：${msg}`, "error");
     alert(msg);
   } finally {
     exportBtn.disabled = false;
@@ -1265,119 +1361,65 @@ exportTilesBtn.addEventListener("click", async () => {
   if (!currentFile) return;
   const cols = Math.max(1, parseInt(colsInput.value || "2", 10));
   const rows = Math.max(1, parseInt(rowsInput.value || "2", 10));
-  const dpi = parseInt(dpiInput.value || "300", 10) || 300;
+  const dpi = parseSelectedDpi();
   const orientation = orientationSelect.value || "portrait";
+  const tileRect = getTileCropOnOriginal();
 
-  const imgRect = imageEl.getBoundingClientRect();
-  const tileCropRect = tileCropBox.getBoundingClientRect();
-  const scaleX = origWidth / imgRect.width;
-  const scaleY = origHeight / imgRect.height;
-  const cropX = Math.max(0, (tileCropRect.left - imgRect.left) * scaleX);
-  const cropY = Math.max(0, (tileCropRect.top - imgRect.top) * scaleY);
-  const cropW = Math.min(origWidth - cropX, tileCropRect.width * scaleX);
-  const cropH = Math.min(origHeight - cropY, tileCropRect.height * scaleY);
-
-  const endpoint = "/tile_export_prepare";
-  logDownloadStep("start", {
+  logExportStep("start", {
     mode: "tiles",
     paper: paperSelect.value,
     orientation,
     dpi,
     cols,
     rows,
-    cropRect: { cropX, cropY, cropW, cropH },
+    cropRect: tileRect,
     fileSize: currentFile.size,
     fileName: currentFile.name,
   });
 
-  const form = new FormData();
-  form.append("image", currentFile);
-  form.append("cols", String(cols));
-  form.append("rows", String(rows));
-  form.append("dpi", String(dpi));
-  form.append("orientation", orientation);
-  form.append("paper", paperSelect.value);
-  form.append("crop_x", String(cropX));
-  form.append("crop_y", String(cropY));
-  form.append("crop_w", String(cropW));
-  form.append("crop_h", String(cropH));
-
   exportTilesBtn.disabled = true;
   exportTilesBtn.textContent = "正在生成多页 PDF…";
-  const t0 = performance.now();
   try {
-    logDownloadStep("requestSent", { endpoint, t0 });
-    const resp = await fetch(endpoint, {
-      method: "POST",
-      body: form,
+    const preparedSource = await prepareSourceForExport({
+      mode: "tiles",
+      rect: tileRect,
+      dpi,
+      cols,
+      rows,
     });
-    const elapsedMs = Math.round(performance.now() - t0);
-    logDownloadStep("responseHeaders", {
-      endpoint,
-      status: resp.status,
-      statusText: resp.statusText,
-      contentType: resp.headers.get("content-type"),
-      elapsedMs,
+    if (preparedSource.qualityWarning) {
+      setExportStatus(`清晰度提示：${preparedSource.qualityWarning}`, "idle");
+      console.warn("[export] quality-warning", preparedSource.qualityMetrics);
+    }
+    const source = await ensureUploadedSource(preparedSource.file);
+    setExportStatus("正在生成分页 PDF…", "working");
+    const prepared = await prepareTileExport({
+      sourceUrl: source.url,
+      sourceName: preparedSource.sourceName,
+      cols,
+      rows,
+      dpi,
+      orientation,
+      paper: paperSelect.value,
+      cropX: preparedSource.rect.cropX,
+      cropY: preparedSource.rect.cropY,
+      cropW: preparedSource.rect.cropW,
+      cropH: preparedSource.rect.cropH,
     });
-
-    if (!resp.ok) {
-      const data: { error?: string } = await resp.json().catch(() => ({}));
-      const msg = buildFailureMessage("prepare", {
-        status: resp.status,
-        statusText: resp.statusText,
-        bodyError: data.error ?? "",
-        endpoint,
-      });
-      logDownloadError("prepare", new Error(msg), {
-        status: resp.status,
-        endpoint,
-        bodyError: data.error,
-      });
-      alert(msg);
-      return;
-    }
-
-    let data: unknown;
-    try {
-      data = await resp.json();
-    } catch (err) {
-      const msg = buildFailureMessage("parseJson", {
-        status: resp.status,
-        endpoint,
-        error: err,
-      });
-      logDownloadError("parseJson", err, { endpoint });
-      alert(msg);
-      return;
-    }
-
-    if (!isPrepareResponse(data)) {
-      const msg = buildFailureMessage("parseJson", {
-        endpoint,
-        error: new Error("服务端返回 JSON 结构不符合 { token, filename }"),
-      });
-      logDownloadError(
-        "parseJson",
-        new Error("invalid PrepareResponse"),
-        { endpoint, raw: data }
-      );
-      alert(msg);
-      return;
-    }
-
-    logDownloadStep("prepareOk", {
-      token: data.token,
-      filename: data.filename,
+    setExportStatus("正在生成下载链接…", "working");
+    const downloadUrl = await requestDownloadUrl(prepared.pathname);
+    logExportStep("prepareOk", {
+      pathname: prepared.pathname,
+      filename: prepared.filename,
+      downloadUrl,
+      ...preparedSource.qualityMetrics,
     });
-    const downloadUrl = buildDownloadUrl(data.token, data.filename);
-    logDownloadStep("navigate", { downloadUrl });
+    setExportStatus(`分页导出已就绪：${prepared.filename}`, "success");
     triggerNativeDownload(downloadUrl);
   } catch (err) {
-    const msg = buildFailureMessage("network", {
-      endpoint,
-      error: err,
-    });
-    logDownloadError("network", err, { endpoint });
+    const msg = describeError(err);
+    logExportError("tile-export", err, {});
+    setExportStatus(`导出失败：${msg}`, "error");
     alert(msg);
   } finally {
     exportTilesBtn.disabled = false;
