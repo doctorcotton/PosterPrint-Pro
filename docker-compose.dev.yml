@@ -1,0 +1,5 @@
+services:
+  poster-crop:
+    volumes:
+      # 开发态直接挂载宿主 dist，配合 `npm run build --watch` 可免重建前端镜像。
+      - ./dist:/app/dist:ro

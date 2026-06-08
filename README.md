@@ -164,7 +164,7 @@ python3 crop_server.py
 
 ### 4. 导出 PDF
 
-点击导出按钮后，前端会先把当前源图上传到 **Private Blob**，再调用 `/api/export_prepare` 或 `/api/tile_export_prepare` 生成 PDF，最后调用 `/api/blob-download-url` 换取一个 **短期签名下载链接** 并触发浏览器原生下载。
+点击导出按钮后，前端会先把当前源图上传到 **Private Blob**，再调用 `/api/export_prepare` 或 `/api/tile_export_prepare` 生成 PDF，最后调用 `/api/blob-download-url` 换取一个 **短期签名下载链接**，并在**新页签**里发起浏览器下载，当前编辑页会保持不动。
 
 ---
 
@@ -250,6 +250,28 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest tests/ -v
 ./start-docker.sh
 ```
 
+### 开发态半热更新（推荐用于改前端）
+
+如果你现在主要是在改 `src/` 前端代码，不想每次都 `docker-compose up -d --build`，可以改用下面这条开发链：
+
+```bash
+./start-docker-watch.sh
+```
+
+它会做三件事：
+
+- 先执行一次 `npm run build`
+- 后台启动 `npm run build --watch`
+- 通过 `docker-compose.dev.yml` 把宿主机的 `dist/` 挂进容器
+
+这样前端代码变更后，`dist/` 会自动重建，容器会直接读到新的静态产物，**不需要重新 build Docker 镜像**。
+
+停止开发态：
+
+```bash
+./stop-docker-watch.sh
+```
+
 ### 手动启动
 
 构建镜像前请在项目根目录执行 **`npm run build`**，保证 `dist/` 为最新（容器内只带 `dist/`，不再复制根目录 `crop.html` / `crop.css`）。
@@ -293,6 +315,12 @@ docker-compose down
 docker-compose logs -f
 ```
 
+开发态 watcher 日志默认写到：
+
+```bash
+.docker-dev/build-watch.log
+```
+
 ---
 
 ## ❓ 常见问题
@@ -318,7 +346,7 @@ A: 可以修改 `run_crop_app.py` 中的端口号，或者关闭占用该端口�
 
 ### Q: 导出 PDF 下载卡住，或无反应
 
-A: 导出流程为 **token + GET 导航下载**（`POST …_prepare` → 导航到 `GET /download/...`），请在浏览器 **开发者工具 Console** 查看以 `[download]` 开头的日志。若 Chrome 提示 `loaded over an insecure connection`，说明 HTTP 下载被拦截，请使用 `https://宿主机局域网IP:15235`，或从 HTTP 页面重新点击导出让前端自动跳到 HTTPS 下载端口。若使用自签证书，首次访问 HTTPS 地址需要手动继续。若 `/download/...` 返回 500，请查看容器日志。同一局域网请确保其它设备访问的是 **宿主机局域网 IP**，而不是容器内部的 `172.x` 地址。
+A: 导出流程为 **先开新页签，再发起 GET 下载**（`POST …_prepare` → 换取下载链接 → 新页签跳到下载地址），请在浏览器 **开发者工具 Console** 查看以 `[export]` 开头的日志。若 Chrome 提示 `loaded over an insecure connection`，说明 HTTP 下载被拦截，请使用 `https://宿主机局域网IP:15235`，或从 HTTP 页面重新点击导出让前端自动跳到 HTTPS 下载端口。若浏览器拦截了新页签，请允许当前站点弹窗后重试。若使用自签证书，首次访问 HTTPS 地址需要手动继续。若 `/download/...` 返回 500，请查看容器日志。同一局域网请确保其它设备访问的是 **宿主机局域网 IP**，而不是容器内部的 `172.x` 地址。
 
 ---
 

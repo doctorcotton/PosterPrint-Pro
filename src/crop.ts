@@ -20,6 +20,10 @@ import {
   type CropRect,
   type ExportMode,
 } from "./export-resolution";
+import {
+  openPendingDownloadTab,
+  type PendingDownloadTab,
+} from "./download-tab";
 import { pageSizeInch, paperAspectRatio } from "./paper";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
@@ -1170,9 +1174,21 @@ function logExportError(
   }
 }
 
-function triggerNativeDownload(downloadUrl: string): void {
-  logExportStep("navigate-assign", { downloadUrl });
-  window.location.assign(downloadUrl);
+/** 导出按钮点击后，同步打开空白页签，降低浏览器拦截概率。 */
+function openExportDownloadTab(mode: ExportMode): PendingDownloadTab {
+  const pendingTab = openPendingDownloadTab();
+  logExportStep("download-tab-opened", { mode });
+  return pendingTab;
+}
+
+/** 下载链接就绪后，让预先打开的页签开始真正下载。 */
+function navigateExportDownloadTab(
+  pendingTab: PendingDownloadTab,
+  mode: ExportMode,
+  downloadUrl: string
+): void {
+  logExportStep("download-tab-navigate", { mode, downloadUrl });
+  pendingTab.navigateToDownload(downloadUrl);
 }
 
 function parseSelectedDpi(): number {
@@ -1301,6 +1317,16 @@ exportBtn.addEventListener("click", async () => {
     return;
   }
   const dpi = parseSelectedDpi();
+  let pendingTab: PendingDownloadTab | null = null;
+  try {
+    pendingTab = openExportDownloadTab("single");
+  } catch (err) {
+    const msg = describeError(err);
+    logExportError("download-tab-blocked", err, { mode: "single" });
+    setExportStatus(msg, "error");
+    alert(msg);
+    return;
+  }
   logExportStep("start", {
     mode: "single",
     paper: paperSelect.value,
@@ -1345,9 +1371,11 @@ exportBtn.addEventListener("click", async () => {
       ...preparedSource.qualityMetrics,
     });
     setExportStatus(`导出已就绪：${prepared.filename}`, "success");
-    triggerNativeDownload(downloadUrl);
+    navigateExportDownloadTab(pendingTab, "single", downloadUrl);
+    pendingTab = null;
   } catch (err) {
     const msg = describeError(err);
+    pendingTab?.closePendingTab();
     logExportError("single-export", err, {});
     setExportStatus(`导出失败：${msg}`, "error");
     alert(msg);
@@ -1364,6 +1392,16 @@ exportTilesBtn.addEventListener("click", async () => {
   const dpi = parseSelectedDpi();
   const orientation = orientationSelect.value || "portrait";
   const tileRect = getTileCropOnOriginal();
+  let pendingTab: PendingDownloadTab | null = null;
+  try {
+    pendingTab = openExportDownloadTab("tiles");
+  } catch (err) {
+    const msg = describeError(err);
+    logExportError("download-tab-blocked", err, { mode: "tiles" });
+    setExportStatus(msg, "error");
+    alert(msg);
+    return;
+  }
 
   logExportStep("start", {
     mode: "tiles",
@@ -1415,9 +1453,11 @@ exportTilesBtn.addEventListener("click", async () => {
       ...preparedSource.qualityMetrics,
     });
     setExportStatus(`分页导出已就绪：${prepared.filename}`, "success");
-    triggerNativeDownload(downloadUrl);
+    navigateExportDownloadTab(pendingTab, "tiles", downloadUrl);
+    pendingTab = null;
   } catch (err) {
     const msg = describeError(err);
+    pendingTab?.closePendingTab();
     logExportError("tile-export", err, {});
     setExportStatus(`导出失败：${msg}`, "error");
     alert(msg);
